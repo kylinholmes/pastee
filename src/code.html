@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ClipFlow - Compact View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0076d6",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1a23",
+                        "surface-dark": "#162432",
+                        "card-dark": "#1e2e3e",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem", 
+                        "sm": "0.25rem",
+                        "lg": "0.375rem", 
+                        "xl": "0.5rem", 
+                        "2xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Scrollbar for the sleek look */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* Acrylic backdrop utility helper */
+        .acrylic-bg {
+            background-color: rgba(15, 26, 35, 0.85);
+            backdrop-filter: blur(24px) saturate(120%);
+            -webkit-backdrop-filter: blur(24px) saturate(120%);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display min-h-screen flex items-center justify-center overflow-hidden">
+<!-- Background Wallpaper Simulation to show off the Acrylic effect -->
+<div class="fixed inset-0 z-0">
+<img alt="Background Wallpaper" class="w-full h-full object-cover opacity-60 pointer-events-none" data-alt="Abstract dark fluid gradient background with deep blues and purples" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASSbZDExd5QTOmgEQf9MiPR6U4C2qBYyQ4XtlMhwW8UTUshqul1OfPIInmpZ91J7cLLnlBsC7Mt8L1RRTBLWmLcGOnVqV7hxGNaBvTvAk1mNUMiGoDifoUyyDJuvDHhr2ugox9jbysXo91X1UCmj42zLxQDm7YYQmTA8ADZ6sKEj1I0fi3yKE9HM08sV_IDXKqeuJemT9Wd4_kBV2VMnQp4S3eHKWrJ_0N-kWg2c837uXkE1XrdRjZoFkr0jiXz4Cn5nNn1G8AAqPO"/>
+<div class="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
+</div>
+<!-- ClipFlow Main App Window -->
+<!-- Simulating a floating desktop window with fixed dimensions -->
+<main class="relative z-10 w-full max-w-[420px] h-[750px] flex flex-col rounded-xl border border-white/10 shadow-2xl overflow-hidden acrylic-bg text-white ring-1 ring-black/50">
+<!-- Search & Filter Header -->
+<header class="flex flex-col gap-3 px-4 pt-5 pb-3 bg-gradient-to-b from-[#0f1a23]/90 to-transparent shrink-0">
+<!-- Search Input -->
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="block w-full py-2.5 pl-10 pr-4 text-sm bg-black/20 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-black/40 transition-all shadow-inner" placeholder="Search clips..." type="text" value=""/>
+<!-- Search shortcut hint -->
+<div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+<span class="text-[10px] text-gray-500 bg-white/5 border border-white/5 px-1.5 py-0.5 rounded">/</span>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 mask-linear-fade">
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-full transition-colors whitespace-nowrap">
+<span class="material-symbols-outlined text-[14px] fill-1">check</span>
+                    All Types
+                </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white border border-white/5 rounded-full transition-colors whitespace-nowrap">
+<span class="material-symbols-outlined text-[14px]">text_fields</span>
+                    Text
+                </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white border border-white/5 rounded-full transition-colors whitespace-nowrap">
+<span class="material-symbols-outlined text-[14px]">image</span>
+                    Images
+                </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white border border-white/5 rounded-full transition-colors whitespace-nowrap">
+<span class="material-symbols-outlined text-[14px]">link</span>
+                    Links
+                </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white border border-white/5 rounded-full transition-colors whitespace-nowrap">
+<span class="material-symbols-outlined text-[14px]">folder</span>
+                    Files
+                </button>
+</div>
+</header>
+<!-- Main Content Stream -->
+<div class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2 space-y-1">
+<!-- SECTION: PINNED -->
+<div class="pt-2">
+<h3 class="flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest sticky top-0 backdrop-blur-md z-20 rounded-lg mb-1">
+<span class="material-symbols-outlined text-[14px] fill-1 text-primary">push_pin</span>
+                    Pinned
+                </h3>
+<div class="space-y-1">
+<!-- Item: Text (Slack) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#4A154B] flex items-center justify-center shadow-lg">
+<!-- Slack logo simulation -->
+<span class="material-symbols-outlined text-white text-[20px]">forum</span>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm text-white font-normal truncate">Q3 Design System Roadmap &amp; Milestones</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">Slack • #product-design</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-primary" title="Unpin"><span class="material-symbols-outlined text-[16px] fill-1">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">2h</span>
+</div>
+<!-- Item: Image (Photoshop) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#001e36] border border-white/10 flex items-center justify-center overflow-hidden relative">
+<img alt="Preview" class="w-full h-full object-cover opacity-80" data-alt="Small thumbnail of a gradient UI card design" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqAIC3OG5CnzxEDN9wmuo9WQuj07wnZB9LhM3YhMnDoOiTFgJ_r-6nd9G4VMW8V3b97xQ9cB5o6N_qMJ1h1Y75V4XxSMnayz_co_ZU-rvIbC-VGHb_G0hZkKSPS-jTESER2LHwGrnQ0T6UtTW1pCYi8adcQSs1VeMtaVfqQHZKKWKnwkbxWzXoEcy_Wm5Iq8mcrpg4cHKLOsQ1SlWdy3ja-40sG6gdoOmWOxvj7CT3lhvos5ACzTv5iEaFvWRNv9JYmBWBKgKEnNSM"/>
+<div class="absolute inset-0 flex items-center justify-center bg-black/30">
+<span class="material-symbols-outlined text-white text-[16px] drop-shadow-md">image</span>
+</div>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm text-white font-normal truncate">Dashboard_Mockup_v4.png</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-primary">1.2 MB</span>
+<span class="text-[11px] text-gray-500">•</span>
+<span class="text-[11px] text-gray-400 truncate">Adobe Photoshop</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-primary" title="Unpin"><span class="material-symbols-outlined text-[16px] fill-1">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">1d</span>
+</div>
+</div>
+</div>
+<div class="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-2"></div>
+<!-- SECTION: HISTORY -->
+<div>
+<h3 class="flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest sticky top-0 backdrop-blur-md z-20 rounded-lg mb-1">
+<span class="material-symbols-outlined text-[14px]">history</span>
+                    Today
+                </h3>
+<div class="space-y-1">
+<!-- Item: Color Code (Figma) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-black flex items-center justify-center border border-white/10">
+<div class="w-4 h-4 rounded-full bg-[#0076d6] shadow-sm"></div>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm font-mono text-white truncate">#0076D6</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">Figma • Color Value</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-primary" title="Pin"><span class="material-symbols-outlined text-[16px]">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">2m</span>
+</div>
+<!-- Item: URL (Chrome) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#1e293b] flex items-center justify-center border border-white/5">
+<img alt="Chrome" class="w-5 h-5" data-alt="Chrome logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCV4pHrck8b7C14oAdg2lZc61T727KBP-q9SC9GpgKB3lNWmysoqYhdJE0EAPcXtkLxxncMXmVI5oYekUVWycwMjMIXqTc6iYOeO9SoVm_MNjptIoOuz_H4o9VsaxjwZfemcSvKVdVuMka9NzEm6rUD8DjC-XgIkWRuXkW5ZeH3XnoUPfMNv2lRdbCGy4wuUp5_pjbYPS35fI0Uj8rXHXDvZHRECboc_2UoyUT87JlqdOVAe5-Nh4fllA_Irb6JZcCn9b2x6llbgVC"/>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm text-blue-400 hover:underline cursor-pointer truncate">https://tailwindcss.com/docs/grid-template-columns</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">Google Chrome</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-primary" title="Pin"><span class="material-symbols-outlined text-[16px]">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">5m</span>
+</div>
+<!-- Item: Code Snippet (VS Code) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#2C2C32] flex items-center justify-center border border-white/5">
+<span class="material-symbols-outlined text-blue-400 text-[20px]">code</span>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm font-mono text-gray-300 truncate">npm install @heroicons/react</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">VS Code • Terminal</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-primary" title="Pin"><span class="material-symbols-outlined text-[16px]">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">15m</span>
+</div>
+<!-- Item: File Path (Explorer) -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#e8c04d] flex items-center justify-center border border-white/5 text-black">
+<span class="material-symbols-outlined text-[20px]">folder</span>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm text-white truncate">C:\Users\Project\Assets\Logos</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">File Explorer</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-primary" title="Pin"><span class="material-symbols-outlined text-[16px]">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">1h</span>
+</div>
+<!-- Item: Plain Text -->
+<div class="group relative flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors cursor-default border border-transparent hover:border-white/5">
+<div class="shrink-0 w-9 h-9 rounded-lg bg-[#1e2e3e] flex items-center justify-center border border-white/5">
+<span class="material-symbols-outlined text-gray-400 text-[20px]">description</span>
+</div>
+<div class="flex-1 min-w-0 pr-12">
+<p class="text-sm text-white truncate">Please review the attached documents before...</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[11px] text-gray-400 truncate">System</span>
+</div>
+</div>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background-dark/80 backdrop-blur rounded-lg pl-2 border border-white/10">
+<button class="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-primary" title="Pin"><span class="material-symbols-outlined text-[16px]">push_pin</span></button>
+<button class="p-1.5 hover:bg-white/10 rounded text-white" title="Copy"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-400" title="Delete"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+<span class="text-[11px] text-gray-500 absolute right-3 top-3 group-hover:opacity-0 transition-opacity">3h</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Minimalist Status Bar -->
+<footer class="h-10 bg-[#0f1a23]/90 backdrop-blur border-t border-white/5 flex items-center justify-between px-4 shrink-0 z-20">
+<button class="flex items-center gap-2 group text-gray-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[16px] group-hover:scale-110 transition-transform">grid_view</span>
+<span class="text-xs font-medium">Open Full View</span>
+</button>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5 text-[10px] text-gray-500" title="Sync Status">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></span>
+<span>Synced</span>
+</div>
+<button class="text-gray-400 hover:text-white hover:rotate-90 transition-all">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+</button>
+</div>
+</footer>
+</main>
+</body></html>

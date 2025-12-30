@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 pub enum ClipEvent {
     Text(String),
     Image(Vec<u8>), // 这里只传大小作为示例，实际可传 Vec<u8>
+    Html(String),
+    FileList(Vec<std::path::PathBuf>),
     Error(String),
 }
 
@@ -20,6 +22,34 @@ pub struct SystemHook {
     // 用于防抖 (Debounce)：记录上一次内容的哈希和时间
     pub last_hash: Arc<Mutex<String>>,
     pub last_update: Arc<Mutex<Instant>>,
+}
+
+impl SystemHook {
+    pub fn new(sender: Sender<ClipEvent>) -> Self {
+        Self {
+            sender,
+            last_hash: Arc::new(Mutex::new(String::new())),
+            last_update: Arc::new(Mutex::new(Instant::now())),
+        }
+    }
+
+    pub fn update_latest(&self, data: &[u8]) -> bool {
+        let hash = compute_hash(data);
+        let now = Instant::now();
+        
+        let mut last_hash_guard = self.last_hash.lock().unwrap();
+        let mut last_time_guard = self.last_update.lock().unwrap();
+
+        if *last_hash_guard == hash && now.duration_since(*last_time_guard) < Duration::from_millis(500) {
+            return false;
+        }
+
+
+        *last_hash_guard = hash;
+        *last_time_guard = now;
+        return true;
+    }
+
 }
 
 impl ClipboardHandler for SystemHook {
@@ -36,34 +66,36 @@ impl ClipboardHandler for SystemHook {
             }
         };
 
-        // 2. 尝试读取文本
-        if let Ok(text) = ctx.get_text() {
-            // --- 防抖与去重逻辑 ---
-            let hash = compute_hash(text.as_bytes());
-            let now = Instant::now();
-            
-            let mut last_hash_guard = self.last_hash.lock().unwrap();
-            let mut last_time_guard = self.last_update.lock().unwrap();
-
-            // 如果内容相同，且距离上次更新不足 500ms，则忽略 (Windows常见重复触发问题)
-            if *last_hash_guard == hash && now.duration_since(*last_time_guard) < Duration::from_millis(500) {
-                println!(">> ⚠️ 忽略重复触发 (Debounced)");
+        if let Ok(html) = ctx.get().html() {        // 优先读取 HTML
+            if !self.update_latest(html.as_bytes()) {
                 return CallbackResult::Next;
             }
-
-            // 更新状态
-            *last_hash_guard = hash;
-            *last_time_guard = now;
-
-            // 发送给主线程
+            let _ = self.sender.send(ClipEvent::Html(html));
+        }
+        else if let Ok(text) = ctx.get_text() {
+            if !self.update_latest(text.as_bytes()) {
+                return CallbackResult::Next;
+            }
             let _ = self.sender.send(ClipEvent::Text(text));
         
         } 
-        // 3. 尝试读取图片 (如果不是文本)
         else if let Ok(img) = ctx.get_image() {
-            // 图片处理逻辑类似，这里简化处理
             let data = img.bytes.to_vec();
+            if !self.update_latest(&data) {
+                return CallbackResult::Next;
+            }
             let _ = self.sender.send(ClipEvent::Image(data));
+        } 
+        else if let Ok(file_list) = ctx.get().file_list() {
+            let paths_str = file_list.iter()
+                .map(|p| p.to_string_lossy())
+                .collect::<Vec<_>>().join("\n");
+            if !self.update_latest(paths_str.as_bytes()) {
+                return CallbackResult::Next;
+            }
+            let _ = self.sender.send(ClipEvent::FileList(file_list));
+        } else {
+            eprintln!("未知类型");
         }
 
         // 继续监听下一条消息
