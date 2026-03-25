@@ -108,12 +108,13 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
             let pos = m.position();
             let size = m.size();
             let w = size.width;
-            let h = 220_u32;
+            let h = 380_u32;
             let x = pos.x;
             let y = pos.y + size.height as i32 - h as i32;
 
             let _ = window.set_size(tauri::PhysicalSize::new(w, h));
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+            let _ = window.set_always_on_top(true);
         }
     } else {
         let _ = window.set_size(tauri::PhysicalSize::new(420_u32, 750_u32));

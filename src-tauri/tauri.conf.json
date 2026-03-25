@@ -15,7 +15,7 @@
         "label": "main",
         "title": "pastee",
         "width": 1440,
-        "height": 220,
+        "height": 380,
         "decorations": false,
         "resizable": true,
         "transparent": true,

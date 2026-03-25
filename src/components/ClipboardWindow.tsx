@@ -8,6 +8,7 @@ import { useQueueStore } from '../store/queueStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { detectLayout, Layout } from '../lib/platform'
 import { TypeFilterBar } from './TypeFilterBar'
+import { TypeFilterBarInline } from './TypeFilterBar'
 import { ClipList } from './vertical/ClipList'
 import { ClipBoard } from './horizontal/ClipBoard'
 import { hideWindow } from '../lib/tauri'
@@ -77,7 +78,7 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
         <motion.div
           className={[
             'flex flex-col bg-[var(--bg-primary)] overflow-hidden',
-            isHorizontal ? 'w-screen h-[220px]' : 'w-full h-screen',
+            isHorizontal ? 'w-screen h-[380px]' : 'w-full h-screen',
           ].join(' ')}
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -85,7 +86,7 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
           transition={{ type: 'spring', damping: 28, stiffness: 260 }}
         >
           <Command className="flex flex-col h-full" shouldFilter={false}>
-            {/* Search bar */}
+            {/* Search bar — horizontal: inline with type filter + settings */}
             <div className={[
               'flex items-center gap-2 px-3 border-b border-[var(--border-subtle)]',
               isHorizontal ? 'py-2' : 'py-2.5',
@@ -98,10 +99,19 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
                 className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
               />
               <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0">{totalCount} 条</span>
+              {isHorizontal && <TypeFilterBarInline />}
+              {isHorizontal && (
+                <button
+                  onClick={() => { closeReason.current = 'settings'; setShown(false) }}
+                  className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0 ml-1"
+                >
+                  设置
+                </button>
+              )}
             </div>
 
-            {/* Type filter */}
-            <TypeFilterBar />
+            {/* Type filter — vertical only */}
+            {!isHorizontal && <TypeFilterBar />}
 
             {/* Content */}
             <Command.List className={[

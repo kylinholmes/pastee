@@ -18,6 +18,33 @@ const TYPE_COLORS: Record<ClipType, string> = {
   Files: 'text-[#64748b]',
 }
 
+export function TypeFilterBarInline() {
+  const { filterType, setFilterType } = useClipStore()
+
+  return (
+    <div className="flex gap-1 overflow-x-auto scrollbar-none flex-shrink-0">
+      {FILTERS.map(({ label, value }) => {
+        const active = filterType === value
+        const colorClass = value ? TYPE_COLORS[value] : 'text-[var(--text-primary)]'
+        return (
+          <button
+            key={value}
+            onClick={() => setFilterType(value)}
+            className={[
+              'px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors',
+              active
+                ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                : `${colorClass} hover:bg-[var(--bg-elevated)]`,
+            ].join(' ')}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function TypeFilterBar() {
   const { filterType, setFilterType } = useClipStore()
 
