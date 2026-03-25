@@ -37,6 +37,90 @@ fn get_cursor_position() -> Option<(i32, i32)> {
     None
 }
 
+fn read_layout_setting() -> String {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return "auto".to_string(),
+    };
+
+    #[cfg(target_os = "macos")]
+    let settings_path = home
+        .join("Library")
+        .join("Application Support")
+        .join("com.kylin.pastee")
+        .join("settings.json");
+
+    #[cfg(target_os = "windows")]
+    let settings_path = home
+        .join("AppData")
+        .join("Roaming")
+        .join("com.kylin.pastee")
+        .join("settings.json");
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let settings_path = home
+        .join(".config")
+        .join("com.kylin.pastee")
+        .join("settings.json");
+
+    let contents = match std::fs::read_to_string(&settings_path) {
+        Ok(s) => s,
+        Err(_) => return "auto".to_string(),
+    };
+
+    let json: serde_json::Value = match serde_json::from_str(&contents) {
+        Ok(v) => v,
+        Err(_) => return "auto".to_string(),
+    };
+
+    json.get("layoutOverride")
+        .and_then(|v| v.as_str())
+        .unwrap_or("auto")
+        .to_string()
+}
+
+fn resize_for_layout(window: &tauri::WebviewWindow) {
+    let layout_override = read_layout_setting();
+
+    let is_horizontal = match layout_override.as_str() {
+        "horizontal" => true,
+        "vertical" => false,
+        _ => cfg!(target_os = "macos"), // auto: horizontal on macOS
+    };
+
+    if is_horizontal {
+        // Find the monitor the cursor is on (reuse existing logic)
+        let monitor = {
+            let (cx, cy) = get_cursor_position().unwrap_or((0, 0));
+            window.available_monitors().ok()
+                .and_then(|monitors| {
+                    monitors.into_iter().find(|m| {
+                        let pos = m.position();
+                        let size = m.size();
+                        cx >= pos.x && cx < pos.x + size.width as i32
+                            && cy >= pos.y && cy < pos.y + size.height as i32
+                    })
+                })
+                .or_else(|| window.current_monitor().ok().flatten())
+        };
+
+        if let Some(m) = monitor {
+            let pos = m.position();
+            let size = m.size();
+            let w = size.width;
+            let h = 220_u32;
+            let x = pos.x;
+            let y = pos.y + size.height as i32 - h as i32;
+
+            let _ = window.set_size(tauri::PhysicalSize::new(w, h));
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+        }
+    } else {
+        let _ = window.set_size(tauri::PhysicalSize::new(420_u32, 750_u32));
+        position_window_at_cursor(window);
+    }
+}
+
 /// Extract system file icon for a given extension, returns base64 PNG
 #[cfg(target_os = "windows")]
 fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
@@ -313,13 +397,21 @@ fn delete_clip(
 }
 
 #[tauri::command]
+fn hide_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn toggle_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
             window.hide().map_err(|e| e.to_string())?;
         } else {
-            // Position window near cursor (works across monitors)
-            position_window_at_cursor(&window);
+            // Resize and position window according to layout setting
+            resize_for_layout(&window);
             window.show().map_err(|e| e.to_string())?;
             window.set_focus().map_err(|e| e.to_string())?;
         }
@@ -450,6 +542,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             toggle_pin,
             delete_clip,
             toggle_window,
+            hide_window,
             set_keep_window_open,
             open_accessibility_settings,
             get_image_url,
@@ -689,7 +782,7 @@ fn setup_global_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error:
     
     if let Ok(()) = app.global_shortcut().on_shortcut(shortcut, move |app_handle, _shortcut, _event| {
         if let Some(window) = app_handle.get_webview_window("main") {
-            position_window_at_cursor(&window);
+            resize_for_layout(&window);
             let _ = window.show();
             let _ = window.set_focus();
         }
