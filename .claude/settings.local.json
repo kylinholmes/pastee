@@ -8,7 +8,14 @@
       "Bash(bun add:*)",
       "Bash(bun remove:*)",
       "Bash(bun run:*)",
-      "Bash(bunx tsc:*)"
+      "Bash(bunx tsc:*)",
+      "WebSearch",
+      "WebFetch(domain:motion.dev)",
+      "Bash(cargo build:*)",
+      "Bash(grep:*)",
+      "Bash(cargo check:*)",
+      "Bash(bun tsc:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }
