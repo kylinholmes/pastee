@@ -128,21 +128,23 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
           const MAX_STACK = 3
           const shown = names.slice(0, MAX_STACK)
           const extra = names.length - MAX_STACK
+          const total = shown.length
           return (
             <div className="flex flex-col items-center justify-center flex-1 gap-1.5">
-              {/* Stacked icons */}
-              <div className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
+              {/* Stacked icons: index 0 = front (opaque, highest z), last = back (most transparent) */}
+              <div className="relative" style={{ width: 40 + (total - 1) * 6, height: 40 + (total - 1) * 4 }}>
                 {shown.slice().reverse().map((name, ri) => {
-                  const i = shown.length - 1 - ri
+                  // ri=0 is the backmost icon; i=0 is the frontmost
+                  const i = total - 1 - ri
                   return (
                     <div
                       key={i}
                       className="absolute rounded shadow-sm"
                       style={{
                         left: i * 6,
-                        top: -(i * 4),
+                        top: (total - 1 - i) * 4,
                         zIndex: i,
-                        opacity: 1 - i * 0.15,
+                        opacity: 1 - (total - 1 - i) * 0.25,
                       }}
                     >
                       <FileIcon filename={name} size={40} />
@@ -150,10 +152,17 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
                   )
                 })}
               </div>
-              <span className="text-[8px] text-[var(--text-secondary)] text-center leading-tight px-1 truncate w-full">
-                {names.length === 1 ? names[0] : `${names.length} 个文件`}
-                {extra > 0 && ` +${extra}`}
-              </span>
+              <div className="flex flex-col items-center gap-0.5 w-full">
+                <span className="text-[8px] text-[var(--text-secondary)] text-center leading-tight px-1 truncate w-full">
+                  {names.length === 1 ? names[0] : `${names.length} 个文件`}
+                </span>
+                {names.length > 1 && (
+                  <span className="text-[7px] text-[var(--text-muted)] text-center truncate w-full px-1">
+                    {shown.map(n => n.split('/').pop()).join(', ')}
+                    {extra > 0 && ` +${extra}`}
+                  </span>
+                )}
+              </div>
             </div>
           )
         })() : (

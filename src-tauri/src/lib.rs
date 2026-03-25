@@ -116,16 +116,16 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             let _ = window.set_always_on_top(true);
 
-            // macOS: elevate to floating level so window appears above Dock
+            // macOS: elevate above Dock (NSDockWindowLevel=20) using NSStatusWindowLevel=25
             #[cfg(target_os = "macos")]
             {
                 use objc2_app_kit::NSWindow;
-                use objc2_app_kit::NSFloatingWindowLevel;
+                use objc2_app_kit::NSStatusWindowLevel;
                 use objc2::rc::autoreleasepool;
                 autoreleasepool(|_| unsafe {
                     if let Ok(ns_window) = window.ns_window() {
                         let ns_window = ns_window as *mut NSWindow;
-                        (*ns_window).setLevel(NSFloatingWindowLevel);
+                        (*ns_window).setLevel(NSStatusWindowLevel);
                     }
                 });
             }
@@ -232,20 +232,20 @@ fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
 
 #[cfg(target_os = "macos")]
 fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
-    use objc2_app_kit::{NSWorkspace, NSImage};
+    use objc2_app_kit::NSWorkspace;
     use objc2_foundation::NSString;
     use objc2::rc::autoreleasepool;
 
     autoreleasepool(|_| unsafe {
         let workspace = NSWorkspace::sharedWorkspace();
-        let ext = NSString::from_str(extension);
-        let ns_image: objc2::rc::Retained<NSImage> = workspace.iconForFileType(&ext);
+        // Fake path — macOS resolves icon by extension even if file doesn't exist
+        let fake_path = NSString::from_str(&format!("/tmp/dummy.{}", extension));
+        let ns_image = workspace.iconForFile(&fake_path);
+        ns_image.setSize(objc2_foundation::NSSize { width: 64.0, height: 64.0 });
 
-        // Get TIFF representation then convert to PNG via image crate
         let tiff_data = ns_image.TIFFRepresentation()?;
-        let bytes: &[u8] = tiff_data.bytes();
+        let bytes = tiff_data.bytes();
         let img = image::load_from_memory(bytes).ok()?;
-        let img = img.resize(64, 64, image::imageops::FilterType::Lanczos3);
         let mut png_buf = Vec::new();
         img.write_with_encoder(image::codecs::png::PngEncoder::new(&mut png_buf)).ok()?;
         Some(png_buf)
