@@ -72,3 +72,7 @@ export const onClipboardNewClip = (callback: (data: any) => void): Promise<() =>
         callback(event.payload);
     });
 };
+
+export async function hideWindow(): Promise<void> {
+  await invoke('hide_window')
+}
