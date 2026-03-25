@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../../store/settingsStore'
 
 export function GeneralPanel() {
@@ -10,7 +11,10 @@ export function GeneralPanel() {
       <SettingRow label="布局偏好" description="覆盖自动平台检测">
         <select
           value={layoutOverride}
-          onChange={e => update('layoutOverride', e.target.value as any)}
+          onChange={async e => {
+            await update('layoutOverride', e.target.value as any)
+            invoke('apply_layout').catch(() => {})
+          }}
           className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] outline-none"
         >
           <option value="auto">自动</option>

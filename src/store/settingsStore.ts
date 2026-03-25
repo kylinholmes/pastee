@@ -1,8 +1,6 @@
 // src/store/settingsStore.ts
 import { create } from 'zustand'
-import { LazyStore } from '@tauri-apps/plugin-store'
-
-const store = new LazyStore('settings.json')
+import { invoke } from '@tauri-apps/api/core'
 
 export type LayoutOverride = 'auto' | 'vertical' | 'horizontal'
 export type Theme = 'dark' | 'light' | 'system'
@@ -37,19 +35,20 @@ interface SettingsStore extends Settings {
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
 }
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
   ...DEFAULTS,
   loaded: false,
 
   load: async () => {
     try {
-      const entries = await Promise.all(
-        (Object.keys(DEFAULTS) as (keyof Settings)[]).map(async (key) => {
-          const val = await store.get<Settings[typeof key]>(key)
-          return [key, val ?? DEFAULTS[key]] as const
-        })
-      )
-      set({ ...Object.fromEntries(entries), loaded: true } as any)
+      const saved = await invoke<Record<string, unknown>>('get_settings')
+      const merged = (Object.fromEntries(
+        (Object.keys(DEFAULTS) as (keyof Settings)[]).map(key => [
+          key,
+          saved[key] !== undefined ? saved[key] : DEFAULTS[key],
+        ])
+      ) as unknown) as Settings
+      set({ ...merged, loaded: true })
     } catch (e) {
       console.warn('Settings load failed, using defaults:', e)
       set({ loaded: true })
@@ -59,8 +58,13 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   update: async (key, value) => {
     set({ [key]: value } as any)
     try {
-      await store.set(key, value)
-      await store.save()
+      const current = get()
+      const toSave: Partial<Settings> = {}
+      for (const k of Object.keys(DEFAULTS) as (keyof Settings)[]) {
+        toSave[k] = current[k] as any
+      }
+      toSave[key] = value
+      await invoke('save_settings', { settings: toSave })
     } catch (e) {
       console.warn('Settings save failed:', e)
     }

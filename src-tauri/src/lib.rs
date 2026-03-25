@@ -32,7 +32,29 @@ fn get_cursor_position() -> Option<(i32, i32)> {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+fn get_cursor_position() -> Option<(i32, i32)> {
+    // CGEventGetLocation works from any thread
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
+        fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+        fn CFRelease(cf: *mut std::ffi::c_void);
+    }
+    #[repr(C)]
+    struct CGPoint { x: f64, y: f64 }
+
+    unsafe {
+        let event = CGEventCreate(std::ptr::null());
+        if event.is_null() { return None; }
+        let pt = CGEventGetLocation(event);
+        CFRelease(event);
+        // CGEvent coordinates are already in top-left origin on macOS (screen coordinates)
+        Some((pt.x as i32, pt.y as i32))
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn get_cursor_position() -> Option<(i32, i32)> {
     None
 }
@@ -42,26 +64,7 @@ fn read_layout_setting() -> String {
         Some(h) => h,
         None => return "auto".to_string(),
     };
-
-    #[cfg(target_os = "macos")]
-    let settings_path = home
-        .join("Library")
-        .join("Application Support")
-        .join("com.kylin.pastee")
-        .join("settings.json");
-
-    #[cfg(target_os = "windows")]
-    let settings_path = home
-        .join("AppData")
-        .join("Roaming")
-        .join("com.kylin.pastee")
-        .join("settings.json");
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let settings_path = home
-        .join(".config")
-        .join("com.kylin.pastee")
-        .join("settings.json");
+    let settings_path = home.join("Documents").join("pastee").join("settings.json");
 
     let contents = match std::fs::read_to_string(&settings_path) {
         Ok(s) => s,
@@ -107,31 +110,44 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
         if let Some(m) = monitor {
             let pos = m.position();
             let size = m.size();
+            let scale = m.scale_factor();
             let w = size.width;
-            let h = 480_u32;
+            let h = 680;
             let x = pos.x;
             let y = pos.y + size.height as i32 - h as i32;
 
             let _ = window.set_size(tauri::PhysicalSize::new(w, h));
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             let _ = window.set_always_on_top(true);
-
-            // macOS: elevate above Dock (NSDockWindowLevel=20) using NSStatusWindowLevel=25
             #[cfg(target_os = "macos")]
-            {
-                use objc2_app_kit::NSWindow;
-                use objc2_app_kit::NSStatusWindowLevel;
-                use objc2::rc::autoreleasepool;
-                autoreleasepool(|_| unsafe {
-                    if let Ok(ns_window) = window.ns_window() {
-                        let ns_window = ns_window as *mut NSWindow;
-                        (*ns_window).setLevel(NSStatusWindowLevel);
-                    }
-                });
-            }
+            set_window_above_dock(window);
         }
     } else {
-        let _ = window.set_size(tauri::PhysicalSize::new(420_u32, 750_u32));
+        // Vertical layout: position near cursor, cap height to available screen area
+        let (cx, cy) = get_cursor_position().unwrap_or((0, 0));
+        let monitor = window.available_monitors().ok()
+            .and_then(|monitors| {
+                monitors.into_iter().find(|m| {
+                    let pos = m.position();
+                    let size = m.size();
+                    cx >= pos.x && cx < pos.x + size.width as i32
+                        && cy >= pos.y && cy < pos.y + size.height as i32
+                })
+            })
+            .or_else(|| window.current_monitor().ok().flatten());
+
+        let logical_h: u32 = if let Some(ref m) = monitor {
+            let scale = m.scale_factor();
+            // Available height in logical pixels, leave ~80px for Dock + margin
+            let available = (m.size().height as f64 / scale) as u32;
+            (available.saturating_sub(80)).min(750)
+        } else {
+            750
+        };
+
+        let _ = window.set_size(tauri::LogicalSize::new(420_u32, logical_h));
+        #[cfg(target_os = "macos")]
+        set_window_above_dock(window);
         position_window_at_cursor(window);
     }
 }
@@ -255,6 +271,39 @@ fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn extract_file_icon(_extension: &str) -> Option<Vec<u8>> {
     None
+}
+
+#[cfg(target_os = "macos")]
+fn get_frontmost_app() -> Option<String> {
+    use objc2_app_kit::NSWorkspace;
+    use objc2::rc::autoreleasepool;
+    autoreleasepool(|_| unsafe {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let app = workspace.frontmostApplication()?;
+        let name = app.localizedName()?;
+        Some(name.to_string())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn get_frontmost_app() -> Option<String> {
+    None
+}
+
+/// Set window level above Dock on macOS. Called once at startup and on every layout change.
+#[cfg(target_os = "macos")]
+fn set_window_above_dock(window: &tauri::WebviewWindow) {
+    use objc2_app_kit::NSWindow;
+    use objc2::rc::autoreleasepool;
+    // NSPopUpMenuWindowLevel = 101: above Dock (20), Spotlight (1000 in some contexts),
+    // and NSStatusWindowLevel (25). This is the standard level for transient system-like panels.
+    const NS_POP_UP_MENU_WINDOW_LEVEL: isize = 101;
+    autoreleasepool(|_| unsafe {
+        if let Ok(ns_window) = window.ns_window() {
+            let ns_window = ns_window as *mut NSWindow;
+            (*ns_window).setLevel(NS_POP_UP_MENU_WINDOW_LEVEL);
+        }
+    });
 }
 
 /// Position window near cursor, using the monitor the cursor is actually on
@@ -526,6 +575,179 @@ fn set_keep_window_open(state: tauri::State<AppState>, keep: bool) -> Result<(),
     Ok(())
 }
 
+struct LinkMeta {
+    title: Option<String>,
+    domain: Option<String>,
+    og_image: Option<String>,
+    favicon: Option<String>,
+}
+
+/// Fetch link metadata synchronously with a 5-second timeout. Returns None on failure.
+fn fetch_link_meta_sync(url: &str) -> Option<LinkMeta> {
+    use std::io::Read;
+    use std::time::Duration;
+
+    let domain = extract_domain(url);
+
+    let response = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .get(url)
+        .set("User-Agent", "Mozilla/5.0 (compatible; pastee/1.0)")
+        .call()
+        .ok()?;
+
+    let mut body = String::new();
+    response.into_reader().take(128 * 1024).read_to_string(&mut body).ok()?;
+
+    let title = parse_meta_tag(&body, "og:title").or_else(|| parse_title(&body));
+    let og_image = parse_meta_tag(&body, "og:image").map(|u| resolve_url(url, &u));
+    let favicon = Some(find_favicon(&body, url));
+
+    Some(LinkMeta { title, domain, og_image, favicon })
+}
+
+mod url_helper {
+    pub fn extract_domain(url: &str) -> Option<String> {
+        let without_scheme = url.trim_start_matches("https://").trim_start_matches("http://");
+        let host = without_scheme.split('/').next()?;
+        let host = host.split('?').next()?;
+        Some(host.trim_start_matches("www.").to_string())
+    }
+}
+
+fn extract_domain(url: &str) -> Option<String> {
+    url_helper::extract_domain(url)
+}
+
+fn parse_meta_tag(html: &str, property: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let search = format!("property=\"{}\"", property.to_lowercase());
+    let search2 = format!("property='{}'", property.to_lowercase());
+    let search3 = format!("name=\"{}\"", property.to_lowercase());
+
+    for s in [&search, &search2, &search3] {
+        if let Some(pos) = lower.find(s.as_str()) {
+            let tag_start = html[..pos].rfind('<').unwrap_or(0);
+            let tag_end = html[pos..].find('>').map(|e| pos + e + 1).unwrap_or(html.len());
+            let tag = &html[tag_start..tag_end];
+            if let Some(content) = extract_attr(tag, "content") {
+                return Some(decode_html_entities(&content));
+            }
+        }
+    }
+    None
+}
+
+fn parse_title(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let start = lower.find("<title")?;
+    let end_tag = lower[start..].find('>')?;
+    let content_start = start + end_tag + 1;
+    let content_end = lower[content_start..].find("</title>").map(|e| content_start + e)?;
+    let raw = &html[content_start..content_end];
+    Some(decode_html_entities(raw.trim()))
+}
+
+fn find_favicon(html: &str, base_url: &str) -> String {
+    let lower = html.to_lowercase();
+    // Look for <link rel="icon" or rel="shortcut icon"
+    let mut pos = 0;
+    while let Some(link_pos) = lower[pos..].find("<link") {
+        let abs = pos + link_pos;
+        let end = lower[abs..].find('>').map(|e| abs + e + 1).unwrap_or(html.len());
+        let tag = &html[abs..end];
+        let tag_lower = tag.to_lowercase();
+        if tag_lower.contains("rel=\"icon\"") || tag_lower.contains("rel='icon'")
+            || tag_lower.contains("shortcut icon") {
+            if let Some(href) = extract_attr(tag, "href") {
+                return resolve_url(base_url, &href);
+            }
+        }
+        pos = end;
+    }
+    // Fallback: /favicon.ico
+    let domain_part = {
+        let s = base_url.trim_start_matches("https://").trim_start_matches("http://");
+        let host = s.split('/').next().unwrap_or("");
+        format!("https://{}/favicon.ico", host)
+    };
+    domain_part
+}
+
+fn extract_attr(tag: &str, attr: &str) -> Option<String> {
+    let lower = tag.to_lowercase();
+    let search_dq = format!("{}=\"", attr.to_lowercase());
+    let search_sq = format!("{}='", attr.to_lowercase());
+    if let Some(pos) = lower.find(&search_dq) {
+        let start = pos + search_dq.len();
+        let end = tag[start..].find('"').map(|e| start + e)?;
+        return Some(tag[start..end].to_string());
+    }
+    if let Some(pos) = lower.find(&search_sq) {
+        let start = pos + search_sq.len();
+        let end = tag[start..].find('\'').map(|e| start + e)?;
+        return Some(tag[start..end].to_string());
+    }
+    None
+}
+
+fn resolve_url(base: &str, url: &str) -> String {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return url.to_string();
+    }
+    let scheme_host = {
+        let s = base.trim_start_matches("https://").trim_start_matches("http://");
+        let host = s.split('/').next().unwrap_or("");
+        let scheme = if base.starts_with("https://") { "https" } else { "http" };
+        format!("{}://{}", scheme, host)
+    };
+    if url.starts_with('/') {
+        format!("{}{}", scheme_host, url)
+    } else {
+        // relative — best effort
+        let base_path = base.rsplitn(2, '/').nth(1).unwrap_or(base);
+        format!("{}/{}", base_path, url)
+    }
+}
+
+fn decode_html_entities(s: &str) -> String {
+    s.replace("&amp;", "&")
+     .replace("&lt;", "<")
+     .replace("&gt;", ">")
+     .replace("&quot;", "\"")
+     .replace("&#39;", "'")
+     .replace("&apos;", "'")
+}
+
+#[tauri::command]
+fn apply_layout(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        resize_for_layout(&window);
+    }
+    // Notify main window to reload settings
+    let _ = app.emit("settings://changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn get_settings(state: tauri::State<AppState>) -> Result<serde_json::Value, String> {
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    let path = storage.data_dir().join("settings.json");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => serde_json::from_str(&s).map_err(|e| e.to_string()),
+        Err(_) => Ok(serde_json::json!({})),
+    }
+}
+
+#[tauri::command]
+fn save_settings(state: tauri::State<AppState>, settings: serde_json::Value) -> Result<(), String> {
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    let path = storage.data_dir().join("settings.json");
+    let s = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, s).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_accessibility_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -606,6 +828,9 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             get_thumbnail,
             get_file_icon,
             paste_clip,
+            get_settings,
+            save_settings,
+            apply_layout,
         ])
         .on_window_event(|_window, event| {
             match event {
@@ -633,23 +858,50 @@ pub fn handle_clipboard_event(
             Ok(ClipEvent::Text(text)) => {
                 let trimmed_text = text.trim_start().to_string();
                 println!("✅ 捕获到文本: [ {} ]", trimmed_text);
-                
-                // 保存到数据库
-                if let Ok(mut store) = storage.lock() {
-                    if let Err(e) = store.add_text(trimmed_text.clone()) {
-                        eprintln!("❌ 保存文本失败: {}", e);
+                let source = get_frontmost_app();
+
+                // 保存到数据库，获取 id
+                let saved_id = if let Ok(mut store) = storage.lock() {
+                    match store.add_text(trimmed_text.clone(), source) {
+                        Ok(id) => Some(id),
+                        Err(e) => { eprintln!("❌ 保存文本失败: {}", e); None }
                     }
-                }
-                
+                } else { None };
+
                 // 推送事件到前端
                 let _ = app.emit("clipboard://new-clip", serde_json::json!({
                     "type": "text",
                     "preview": trimmed_text
                 }));
+
+                // 如果是 URL，后台异步 fetch 元数据
+                if let Some(id) = saved_id {
+                    let is_url = trimmed_text.starts_with("http://") || trimmed_text.starts_with("https://");
+                    if is_url && id > 0 {
+                        let url = trimmed_text.clone();
+                        let storage_clone = Arc::clone(&storage);
+                        let app_clone = app.clone();
+                        thread::spawn(move || {
+                            if let Some(meta) = fetch_link_meta_sync(&url) {
+                                if let Ok(store) = storage_clone.lock() {
+                                    let _ = store.update_link_meta(
+                                        id,
+                                        meta.title.as_deref(),
+                                        meta.domain.as_deref(),
+                                        meta.og_image.as_deref(),
+                                        meta.favicon.as_deref(),
+                                    );
+                                }
+                                let _ = app_clone.emit("clipboard://link-meta-ready", serde_json::json!({ "id": id }));
+                            }
+                        });
+                    }
+                }
             },
             Ok(ClipEvent::Image { width, height, rgba_data }) => {
                 println!("✅ 捕获到图片: [ {}x{}, {} bytes ]", width, height, rgba_data.len());
-                
+                let source = get_frontmost_app();
+
                 // 立即发送"处理中"事件给前端
                 let temp_id = chrono::Utc::now().timestamp_micros();
                 let _ = app.emit("clipboard://image-pending", serde_json::json!({
@@ -662,7 +914,7 @@ pub fn handle_clipboard_event(
                 let app_clone = app.clone();
                 thread::spawn(move || {
                     if let Ok(mut store) = storage_clone.lock() {
-                        match store.add_image(width, height, rgba_data) {
+                        match store.add_image(width, height, rgba_data, source) {
                             Ok((id, thumbnail_data)) => {
                                 // 将缩略图数据编码为 base64 发送给前端
                                 let base64_thumbnail = general_purpose::STANDARD.encode(&thumbnail_data);
@@ -686,6 +938,7 @@ pub fn handle_clipboard_event(
             },
             Ok(ClipEvent::Html(html)) => {
                 println!("✅ 捕获到 HTML: [ {} bytes ]", html.len());
+                let source = get_frontmost_app();
                 
                 // 从 HTML 中提取纯文本作为 preview
                 // 1. 移除 script 和 style 标签及其内容
@@ -718,7 +971,7 @@ pub fn handle_clipboard_event(
                 
                 // 保存到数据库
                 if let Ok(mut store) = storage.lock() {
-                    if let Err(e) = store.add_html(text_preview, html.clone()) {
+                    if let Err(e) = store.add_html(text_preview, html.clone(), source) {
                         eprintln!("❌ 保存 HTML 失败: {}", e);
                     }
                 }
@@ -730,6 +983,7 @@ pub fn handle_clipboard_event(
             },
             Ok(ClipEvent::FileList(files)) => {
                 println!("✅ 捕获到文件列表: [ {} files ]", files.len());
+                let source = get_frontmost_app();
                 
                 // 转换 PathBuf 为 String
                 let file_paths: Vec<String> = files
@@ -739,7 +993,7 @@ pub fn handle_clipboard_event(
                 
                 // 保存到数据库
                 if let Ok(mut store) = storage.lock() {
-                    if let Err(e) = store.add_files(file_paths) {
+                    if let Err(e) = store.add_files(file_paths, source) {
                         eprintln!("❌ 保存文件列表失败: {}", e);
                     }
                 }
@@ -897,6 +1151,7 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
         {
             use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
             let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
+            set_window_above_dock(&window);
         }
 
         let window_clone = window.clone();

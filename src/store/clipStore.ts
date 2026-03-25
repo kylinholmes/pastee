@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
 export type ClipType = 'Text' | 'Image' | 'Html' | 'Files' | 'Color'
+export type FilterValue = ClipType | 'link' | ''
 
 export interface ClipItem {
   id: number
@@ -12,6 +13,11 @@ export interface ClipItem {
   created_at: number
   is_pinned: boolean
   tags: string[]
+  source?: string
+  link_title?: string
+  link_domain?: string
+  link_og_image?: string
+  link_favicon?: string
   loading?: boolean
   temp_id?: number
 }
@@ -20,14 +26,14 @@ interface ClipStore {
   allClips: ClipItem[]
   searchResults: ClipItem[]
   searchQuery: string
-  filterType: ClipType | ''
+  filterType: FilterValue
   limit: number
   offset: number
   thumbnailCache: Map<number, string>
   totalCount: number
 
   setSearchQuery: (query: string) => void
-  setFilterType: (type: ClipType | '') => void
+  setFilterType: (type: FilterValue) => void
   setOffset: (offset: number) => void
   fetchAllClips: () => Promise<void>
   fetchTotalCount: () => Promise<void>
@@ -154,11 +160,16 @@ export const useClipStore = create<ClipStore>((set, get) => ({
       set(s => ({ allClips: s.allClips.filter(item => item.temp_id !== temp_id) }))
     })
 
+    const unlistenLinkMeta = await listen<{ id: number }>('clipboard://link-meta-ready', () => {
+      get().fetchAllClips()
+    })
+
     return () => {
       unlistenNormal()
       unlistenImagePending()
       unlistenImageReady()
       unlistenImageError()
+      unlistenLinkMeta()
     }
   },
 }))

@@ -1,6 +1,7 @@
 // src/components/ClipboardWindow.tsx
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { motion, AnimatePresence } from 'motion/react'
 import { Command } from 'cmdk'
@@ -19,7 +20,7 @@ interface Props {}
 export function ClipboardWindow({}: Props) {
   const { fetchAllClips, fetchTotalCount, initListener, setSearchQuery, searchQuery, totalCount } = useClipStore()
   const { onItemAdded } = useQueueStore()
-  const { layoutOverride, loaded: settingsLoaded } = useSettingsStore()
+  const { layoutOverride, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
   const [layout, setLayout] = useState<Layout>('vertical')
 
   // Resolve layout: user override takes precedence over OS detection
@@ -31,6 +32,12 @@ export function ClipboardWindow({}: Props) {
       detectLayout().then(setLayout)
     }
   }, [layoutOverride, settingsLoaded])
+
+  // Reload settings when changed from settings window
+  useEffect(() => {
+    const unlisten = listen('settings://changed', () => loadSettings())
+    return () => { unlisten.then(fn => fn()) }
+  }, [])
 
   // Init data + listeners
   useEffect(() => {

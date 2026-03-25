@@ -1,21 +1,23 @@
 // src/components/TypeFilterBar.tsx
-import { ClipType, useClipStore } from '../store/clipStore'
+import { FilterValue, useClipStore } from '../store/clipStore'
 
-const FILTERS: { label: string; value: ClipType | '' }[] = [
+const FILTERS: { label: string; value: FilterValue }[] = [
   { label: '全部', value: '' },
   { label: 'Text', value: 'Text' },
   { label: 'Html', value: 'Html' },
   { label: 'Image', value: 'Image' },
   { label: 'Color', value: 'Color' },
   { label: 'Files', value: 'Files' },
+  { label: 'Link', value: 'link' },
 ]
 
-const TYPE_COLORS: Record<ClipType, string> = {
+const TYPE_COLORS: Record<string, string> = {
   Text: 'text-[#94a3b8]',
   Html: 'text-[#6366f1]',
   Image: 'text-[#f59e0b]',
   Color: 'text-[#94a3b8]',
   Files: 'text-[#64748b]',
+  link: 'text-[#3b82f6]',
 }
 
 export function TypeFilterBarInline() {

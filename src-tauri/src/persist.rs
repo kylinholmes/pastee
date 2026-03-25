@@ -47,10 +47,16 @@ impl From<String> for ClipType {
 pub struct ClipItem {
     pub id: i64,
     pub content_type: ClipType,
-    pub preview: String,   // 预览文本
+    pub preview: String,
     pub created_at: i64,
     pub is_pinned: bool,
-    pub tags: Vec<String>,  // 标签数组：["color", "favorite"], ["image", "work"] 等
+    pub tags: Vec<String>,
+    pub source: Option<String>,
+    // Link metadata (populated asynchronously after insert)
+    pub link_title: Option<String>,
+    pub link_domain: Option<String>,
+    pub link_og_image: Option<String>,
+    pub link_favicon: Option<String>,
 }
 
 
@@ -95,11 +101,11 @@ impl Storage {
     }
 
     fn migrate(conn: &mut Connection) -> Result<()> {
-        // SQL 迁移脚本从外部文件 migrations/*.sql 静态加载
         let schema_sql = include_str!("../migrations/001_schema_init.sql");
-        
+        let link_meta_sql = include_str!("../migrations/002_link_meta.sql");
         let migrations = Migrations::new(vec![
             M::up(schema_sql),
+            M::up(link_meta_sql),
         ]);
         migrations.to_latest(conn)?;
         Ok(())
@@ -107,20 +113,22 @@ impl Storage {
 
 
     /// 1. 存纯文本
-    pub fn add_text(&mut self, text: String) -> Result<i64> {
+    pub fn add_text(&mut self, text: String, source: Option<String>) -> Result<i64> {
         let text = text.trim().to_string();
         if text.is_empty() { return Ok(0); }
         let hash = Self::compute_hash(text.as_bytes());
 
-        // 检测是否为颜色值，设置 tags 数组
+        // 检测类型和标签
         let (clip_type, tags) = if Self::is_color(&text) {
             (ClipType::Color, vec!["color".to_string()])
+        } else if Self::is_url(&text) {
+            (ClipType::Text, vec!["link".to_string()])
         } else {
             (ClipType::Text, vec!["text".to_string()])
         };
 
         let tx = self.conn.transaction()?;
-        let id = Self::upsert_record(&tx, clip_type, &hash, &tags, |sql, params| {
+        let id = Self::upsert_record(&tx, clip_type, &hash, &tags, source.as_deref(), |sql, params| {
              tx.execute(sql, params)
         }, Some(&text), None, None, None)?;
         tx.commit()?;
@@ -128,19 +136,19 @@ impl Storage {
     }
 
     /// 2. 存 HTML (同时存纯文本用于搜索)
-    pub fn add_html(&mut self, text_preview: String, html_content: String) -> Result<i64> {
+    pub fn add_html(&mut self, text_preview: String, html_content: String, source: Option<String>) -> Result<i64> {
         // 检测 text_preview 是否为颜色值，如果是则保存为 Color 类型
         let text_trimmed = text_preview.trim();
         if Self::is_color(text_trimmed) {
             // 直接保存为颜色
-            return self.add_text(text_trimmed.to_string());
+            return self.add_text(text_trimmed.to_string(), source);
         }
         
         // HTML 的指纹计算：建议用 html 内容算，或者 text+html 混合算
         let hash = Self::compute_hash(html_content.as_bytes());
         
         let tx = self.conn.transaction()?;
-        let id = Self::upsert_record(&tx, ClipType::Html, &hash, &vec!["html".to_string()], |sql, params| {
+        let id = Self::upsert_record(&tx, ClipType::Html, &hash, &vec!["html".to_string()], source.as_deref(), |sql, params| {
              tx.execute(sql, params)
         }, Some(&text_preview), Some(&html_content), None, None)?;
         tx.commit()?;
@@ -150,7 +158,7 @@ impl Storage {
     /// 3. 存图片 (已被新的add_image方法替代，此方法已删除)
 
     /// 4. 存文件路径列表 (Vec<Path>)
-    pub fn add_files(&mut self, paths: Vec<String>) -> Result<i64> {
+    pub fn add_files(&mut self, paths: Vec<String>, source: Option<String>) -> Result<i64> {
         if paths.is_empty() { return Ok(0); }
         
         // 序列化为 JSON 存入 DB
@@ -162,7 +170,7 @@ impl Storage {
         let hash = Self::compute_hash(json_str.as_bytes());
 
         let tx = self.conn.transaction()?;
-        let id = Self::upsert_record(&tx, ClipType::Files, &hash, &vec!["files".to_string()], |sql, params| {
+        let id = Self::upsert_record(&tx, ClipType::Files, &hash, &vec!["files".to_string()], source.as_deref(), |sql, params| {
              tx.execute(sql, params)
         }, Some(&search_text), None, None, Some(&json_str))?;
         tx.commit()?;
@@ -175,9 +183,10 @@ impl Storage {
         
         let mut stmt = self.conn.prepare(
             "SELECT id, type, content_text, content_file_paths, created_at, is_pinned, tag,
-             image_format, width, height
-             FROM records 
-             ORDER BY is_pinned DESC, created_at DESC 
+             image_format, width, height, app_context,
+             link_title, link_domain, link_og_image, link_favicon
+             FROM records
+             ORDER BY is_pinned DESC, created_at DESC
              LIMIT ?1 OFFSET ?2"
         )?;
 
@@ -192,6 +201,11 @@ impl Storage {
             let image_format: Option<String> = row.get(7)?;
             let width: Option<i64> = row.get(8)?;
             let height: Option<i64> = row.get(9)?;
+            let source: Option<String> = row.get(10)?;
+            let link_title: Option<String> = row.get(11)?;
+            let link_domain: Option<String> = row.get(12)?;
+            let link_og_image: Option<String> = row.get(13)?;
+            let link_favicon: Option<String> = row.get(14)?;
 
             let content_type = ClipType::from(type_str);
             
@@ -248,6 +262,11 @@ impl Storage {
                 created_at,
                 is_pinned,
                 tags,
+                source,
+                link_title,
+                link_domain,
+                link_og_image,
+                link_favicon,
             })
         })?;
 
@@ -273,14 +292,14 @@ impl Storage {
         // 使用 LIKE 查询支持中文和模糊匹配
         let like_query = format!("%{}%", query.replace('%', "\\%").replace('_', "\\_"));
         let mut stmt = self.conn.prepare(
-            "SELECT id, type, content_text, content_file_paths, created_at, is_pinned, tag 
-             FROM records 
+            "SELECT id, type, content_text, content_file_paths, created_at, is_pinned, tag, app_context,
+             link_title, link_domain, link_og_image, link_favicon
+             FROM records
              WHERE content_text LIKE ?1 ESCAPE '\\'
              ORDER BY created_at DESC LIMIT 50"
         )?;
-        
+
         let rows = stmt.query_map(params![like_query], |row| {
-             // 复制上面的 row mapping 逻辑
              let id: i64 = row.get(0)?;
              let type_str: String = row.get(1)?;
              let text: Option<String> = row.get(2)?;
@@ -288,6 +307,11 @@ impl Storage {
              let created_at: i64 = row.get(4)?;
              let is_pinned: bool = row.get(5)?;
              let tags_json: Option<String> = row.get(6)?;
+             let source: Option<String> = row.get(7)?;
+             let link_title: Option<String> = row.get(8)?;
+             let link_domain: Option<String> = row.get(9)?;
+             let link_og_image: Option<String> = row.get(10)?;
+             let link_favicon: Option<String> = row.get(11)?;
              let content_type = ClipType::from(type_str);
              
              // 解析 tags JSON 数组
@@ -303,7 +327,8 @@ impl Storage {
                 ClipType::Image => "[图片]".to_string(),
                 ClipType::Files => "[文件]".to_string(),
             };
-            Ok(ClipItem { id, content_type, preview, created_at, is_pinned, tags })
+            Ok(ClipItem { id, content_type, preview, created_at, is_pinned, tags, source,
+                link_title, link_domain, link_og_image, link_favicon })
         })?;
 
         let mut items = Vec::new();
@@ -424,8 +449,9 @@ impl Storage {
         ctype: ClipType,
         hash: &str,
         tags: &[String],
+        source: Option<&str>,
         executor: F, // 闭包，用于执行具体的 SQL
-        
+
         // 各种可选字段
         text: Option<&str>,
         html: Option<&str>,
@@ -437,14 +463,15 @@ impl Storage {
     {
         // 1. 将 tags 数组序列化为 JSON
         let tags_json = serde_json::to_string(tags)?;
-        
+
         // 2. 构造 SQL
-        let sql = "INSERT INTO records (type, hash, created_at, content_text, content_html, content_image_path, content_file_paths, tag)
-                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        let sql = "INSERT INTO records (type, hash, created_at, content_text, content_html, content_image_path, content_file_paths, tag, app_context)
+                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                    ON CONFLICT(hash) DO UPDATE SET
                       created_at = excluded.created_at,
-                      tag = excluded.tag";
-        
+                      tag = excluded.tag,
+                      app_context = excluded.app_context";
+
         // 3. 执行
         executor(sql, params![
             ctype.to_string(),
@@ -454,7 +481,8 @@ impl Storage {
             html,
             img_path,
             file_paths,
-            tags_json
+            tags_json,
+            source
         ])?;
 
         // 4. 获取 ID
@@ -538,6 +566,14 @@ impl Storage {
         false
     }
 
+    /// 检测字符串是否为 URL
+    fn is_url(text: &str) -> bool {
+        let t = text.trim();
+        // Must be a single token (no whitespace) and start with http:// or https://
+        if t.contains(char::is_whitespace) { return false; }
+        (t.starts_with("http://") || t.starts_with("https://")) && t.len() > 10
+    }
+
     /// 切换记录的置顶状态
     pub fn toggle_pin(&self, id: i64) -> Result<bool> {
         let new_state: bool = self.conn.query_row(
@@ -571,7 +607,7 @@ impl Storage {
     }
 
     /// 添加图片记录（Phase 1-3 实现）
-    pub fn add_image(&mut self, width: usize, height: usize, rgba_data: Vec<u8>) -> Result<(i64, Vec<u8>)> {
+    pub fn add_image(&mut self, width: usize, height: usize, rgba_data: Vec<u8>, source: Option<String>) -> Result<(i64, Vec<u8>)> {
         use image::{ImageFormat, RgbaImage};
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -669,8 +705,8 @@ impl Storage {
             "INSERT INTO records (
                 type, hash, created_at, content_text,
                 image_path, thumbnail_path, image_format, image_size,
-                image_hash, width, height, tag
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                image_hash, width, height, tag, app_context
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 ClipType::Image.to_string(),
                 hash_hex, // hash字段用于通用去重
@@ -684,6 +720,7 @@ impl Storage {
                 width as i64,
                 height as i64,
                 r#"["image"]"#, // tag标签
+                source,
             ],
         )?;
 
@@ -692,6 +729,21 @@ impl Storage {
         
         // 返回 ID 和缩略图数据
         Ok((id, webp_buffer))
+    }
+
+    /// 更新 link 元数据（异步 fetch 后回写）
+    pub fn update_link_meta(
+        &self, id: i64,
+        title: Option<&str>,
+        domain: Option<&str>,
+        og_image: Option<&str>,
+        favicon: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE records SET link_title=?1, link_domain=?2, link_og_image=?3, link_favicon=?4 WHERE id=?5",
+            params![title, domain, og_image, favicon, id],
+        )?;
+        Ok(())
     }
 
     /// 根据 hash 查找已存在的图片

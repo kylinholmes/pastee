@@ -24,7 +24,6 @@ const TYPE_LABELS: Record<string, string> = {
   Text: '文本', Html: 'Html', Image: '图片', Color: '颜色', Files: '文件',
 }
 
-// Global icon cache: ext -> data:image/png;base64,...
 const iconCache = new Map<string, string>()
 
 async function loadFileIcon(ext: string): Promise<string | null> {
@@ -70,8 +69,11 @@ interface Props {
 
 export function ClipCard({ item, isSelected, onClick }: Props) {
   const { handlePin, handleDelete, thumbnailCache } = useClipStore()
-  const borderColor = TYPE_BORDER_COLORS[item.content_type] ?? 'border-[var(--border)]'
-  const labelColor = TYPE_LABEL_COLORS[item.content_type] ?? 'text-[var(--text-muted)]'
+  const isLink = item.tags?.includes('link')
+  const borderColor = isLink
+    ? 'border-[rgba(59,130,246,0.3)]'
+    : (TYPE_BORDER_COLORS[item.content_type] ?? 'border-[var(--border)]')
+  const labelColor = isLink ? 'text-[#3b82f6]' : (TYPE_LABEL_COLORS[item.content_type] ?? 'text-[var(--text-muted)]')
   const timeStr = new Date(item.created_at / 1000).toLocaleTimeString('zh-CN', {
     hour: '2-digit', minute: '2-digit'
   })
@@ -88,22 +90,22 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
 
   const isImage = item.content_type === 'Image'
   const isFiles = item.content_type === 'Files'
-  const cardWidth = isImage || isFiles ? 'w-44' : 'w-36'
+  const cardWidth = isImage || isFiles || isLink ? 'w-52' : 'w-44'
 
   return (
     <div
       onClick={() => { onClick?.(); handlePaste() }}
       className={[
-        `group flex-shrink-0 ${cardWidth} flex flex-col rounded-xl border bg-[var(--bg-secondary)] p-2.5 cursor-pointer transition-all`,
+        `group flex-shrink-0 ${cardWidth} h-[200px] flex flex-col rounded-xl border bg-[var(--bg-secondary)] p-3 cursor-pointer transition-all`,
         borderColor,
         isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] ring-opacity-40' : 'hover:border-opacity-60',
       ].join(' ')}
     >
       <span className={`text-[9px] font-semibold mb-1.5 ${labelColor}`}>
-        {TYPE_LABELS[item.content_type] ?? item.content_type}
+        {isLink ? 'Link' : (TYPE_LABELS[item.content_type] ?? item.content_type)}
       </span>
 
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {item.loading ? (
           <p className="text-[10px] text-[var(--text-muted)] animate-pulse">处理中...</p>
         ) : item.content_type === 'Color' ? (
@@ -116,9 +118,9 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
           </div>
         ) : isImage ? (
           thumbnailCache.get(item.id) ? (
-            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-28 object-cover rounded" />
+            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-36 object-cover rounded" />
           ) : (
-            <div className="w-full h-28 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
+            <div className="w-full h-36 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
               <span className="text-xs text-[var(--text-muted)]">🖼</span>
             </div>
           )
@@ -131,10 +133,8 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
           const total = shown.length
           return (
             <div className="flex flex-col items-center justify-center flex-1 gap-1.5">
-              {/* Stacked icons: index 0 = front (opaque, highest z), last = back (most transparent) */}
               <div className="relative" style={{ width: 40 + (total - 1) * 6, height: 40 + (total - 1) * 4 }}>
                 {shown.slice().reverse().map((name, ri) => {
-                  // ri=0 is the backmost icon; i=0 is the frontmost
                   const i = total - 1 - ri
                   return (
                     <div
@@ -165,8 +165,10 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
               </div>
             </div>
           )
-        })() : (
-          <p className="text-[10px] text-[var(--text-primary)] line-clamp-4 leading-relaxed">{item.preview}</p>
+        })() : isLink ? (
+          <LinkCardContent item={item} />
+        ) : (
+          <p className="text-[10px] text-[var(--text-primary)] line-clamp-6 leading-relaxed">{item.preview}</p>
         )}
       </div>
 
@@ -182,6 +184,37 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
             className="text-[8px] text-red-400 hover:text-red-300"
           >✕</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function LinkCardContent({ item }: { item: ClipItem }) {
+  const { link_title, link_domain, link_og_image, link_favicon, preview } = item
+  const domain = link_domain || preview.replace(/^https?:\/\//, '').split('/')[0]
+
+  return (
+    <div className="flex flex-col h-full gap-1 overflow-hidden">
+      {link_og_image ? (
+        <div className="relative flex-1 rounded overflow-hidden bg-[var(--bg-elevated)]">
+          <img src={link_og_image} alt="" className="w-full h-full object-cover" />
+          {link_favicon && (
+            <img src={link_favicon} alt="" className="absolute top-1 right-1 w-4 h-4 rounded object-contain bg-white/80 p-px" />
+          )}
+        </div>
+      ) : (
+        <div className="relative flex-1 rounded bg-[var(--bg-elevated)] flex items-center justify-center">
+          <span className="text-xl">🔗</span>
+          {link_favicon && (
+            <img src={link_favicon} alt="" className="absolute top-1 right-1 w-4 h-4 rounded object-contain bg-white/80 p-px" />
+          )}
+        </div>
+      )}
+      <div className="flex-shrink-0">
+        {link_title && (
+          <p className="text-[9px] text-[var(--text-primary)] font-medium leading-tight line-clamp-2">{link_title}</p>
+        )}
+        <p className="text-[8px] text-[#3b82f6] truncate">{domain}</p>
       </div>
     </div>
   )

@@ -13,7 +13,13 @@ export function ClipBoard() {
 
   const list = useMemo(() => {
     let base = searchQuery.trim() ? searchResults : allClips
-    if (filterType) base = base.filter(item => item.content_type === filterType)
+    if (filterType) {
+      if (filterType === 'link') {
+        base = base.filter(item => item.tags?.includes('link'))
+      } else {
+        base = base.filter(item => item.content_type === filterType)
+      }
+    }
     return base
   }, [allClips, searchResults, searchQuery, filterType])
 
