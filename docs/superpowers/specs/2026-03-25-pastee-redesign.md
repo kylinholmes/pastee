@@ -83,6 +83,19 @@ OCR requires a new `ocr_image(id)` Rust command. This is **out of scope for this
 
 **Strategy:** Rewrite frontend. Rust backend receives two targeted additions: `paste_clip` and `get_cursor_position`. All existing backend commands and tests remain unchanged.
 
+**Tech stack:** See full details in `docs/superpowers/specs/2026-03-25-frontend-stack.md`
+
+| 类别 | 库 |
+|------|---|
+| 样式 | Tailwind CSS 4（手写，不用预设组件库） |
+| 动效 | `motion` |
+| 搜索+键盘导航 | `cmdk` |
+| 无障碍原语 | `@radix-ui/react-dialog` / `tooltip` / `scroll-area` |
+| 快捷键 | `react-hotkeys-hook` |
+| 设置持久化 | `@tauri-apps/plugin-store` |
+| 状态管理 | Zustand 5（已有） |
+| 图标 | Lucide React（已有） |
+
 ### 5.1 Component Tree
 
 ```
