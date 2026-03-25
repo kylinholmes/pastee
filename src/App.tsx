@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useSettingsStore } from './store/settingsStore'
 import { ClipboardWindow } from './components/ClipboardWindow'
 import { SettingsWindow } from './components/settings/SettingsWindow'
 import './App.css'
 
+const isSettingsWindow = window.location.hash === '#/settings'
+
 export default function App() {
   const { load, theme } = useSettingsStore()
-  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -17,9 +18,9 @@ export default function App() {
     else if (theme === 'dark') root.classList.add('theme-dark')
   }, [theme])
 
-  if (showSettings) {
-    return <SettingsWindow onClose={() => setShowSettings(false)} />
+  if (isSettingsWindow) {
+    return <SettingsWindow onClose={() => window.close()} />
   }
 
-  return <ClipboardWindow onOpenSettings={() => setShowSettings(true)} />
+  return <ClipboardWindow />
 }

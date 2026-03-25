@@ -108,13 +108,27 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
             let pos = m.position();
             let size = m.size();
             let w = size.width;
-            let h = 380_u32;
+            let h = 480_u32;
             let x = pos.x;
             let y = pos.y + size.height as i32 - h as i32;
 
             let _ = window.set_size(tauri::PhysicalSize::new(w, h));
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             let _ = window.set_always_on_top(true);
+
+            // macOS: elevate to floating level so window appears above Dock
+            #[cfg(target_os = "macos")]
+            {
+                use objc2_app_kit::NSWindow;
+                use objc2_app_kit::NSFloatingWindowLevel;
+                use objc2::rc::autoreleasepool;
+                autoreleasepool(|_| unsafe {
+                    if let Ok(ns_window) = window.ns_window() {
+                        let ns_window = ns_window as *mut NSWindow;
+                        (*ns_window).setLevel(NSFloatingWindowLevel);
+                    }
+                });
+            }
         }
     } else {
         let _ = window.set_size(tauri::PhysicalSize::new(420_u32, 750_u32));
@@ -216,7 +230,29 @@ fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
+    use objc2_app_kit::{NSWorkspace, NSImage};
+    use objc2_foundation::NSString;
+    use objc2::rc::autoreleasepool;
+
+    autoreleasepool(|_| unsafe {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let ext = NSString::from_str(extension);
+        let ns_image: objc2::rc::Retained<NSImage> = workspace.iconForFileType(&ext);
+
+        // Get TIFF representation then convert to PNG via image crate
+        let tiff_data = ns_image.TIFFRepresentation()?;
+        let bytes: &[u8] = tiff_data.bytes();
+        let img = image::load_from_memory(bytes).ok()?;
+        let img = img.resize(64, 64, image::imageops::FilterType::Lanczos3);
+        let mut png_buf = Vec::new();
+        img.write_with_encoder(image::codecs::png::PngEncoder::new(&mut png_buf)).ok()?;
+        Some(png_buf)
+    })
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn extract_file_icon(_extension: &str) -> Option<Vec<u8>> {
     None
 }
@@ -464,6 +500,25 @@ fn paste_clip(
 }
 
 #[tauri::command]
+fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("settings") {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("#/settings".into()))
+        .title("pastee 设置")
+        .inner_size(720.0, 560.0)
+        .resizable(false)
+        .decorations(true)
+        .transparent(false)
+        .always_on_top(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn set_keep_window_open(state: tauri::State<AppState>, keep: bool) -> Result<(), String> {
     let mut keep_open = state.keep_window_open.lock().map_err(|_| "Lock error")?;
     *keep_open = keep;
@@ -544,6 +599,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             delete_clip,
             toggle_window,
             hide_window,
+            open_settings_window,
             set_keep_window_open,
             open_accessibility_settings,
             get_image_url,
@@ -554,9 +610,10 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
         .on_window_event(|_window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    if let Some(window) = _window.app_handle().get_webview_window("main") {
-                        let _ = window.hide();
+                    // Only intercept close on the main window; settings window can close normally
+                    if _window.label() == "main" {
+                        api.prevent_close();
+                        let _ = _window.hide();
                     }
                 }
                 _ => {}

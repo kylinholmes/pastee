@@ -1,5 +1,6 @@
 // src/components/ClipboardWindow.tsx
 import { useEffect, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { motion, AnimatePresence } from 'motion/react'
 import { Command } from 'cmdk'
@@ -13,9 +14,9 @@ import { ClipList } from './vertical/ClipList'
 import { ClipBoard } from './horizontal/ClipBoard'
 import { hideWindow } from '../lib/tauri'
 
-interface Props { onOpenSettings: () => void }
+interface Props {}
 
-export function ClipboardWindow({ onOpenSettings }: Props) {
+export function ClipboardWindow({}: Props) {
   const { fetchAllClips, fetchTotalCount, initListener, setSearchQuery, searchQuery, totalCount } = useClipStore()
   const { onItemAdded } = useQueueStore()
   const { layoutOverride, loaded: settingsLoaded } = useSettingsStore()
@@ -42,7 +43,7 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
   }, [])
 
   const [shown, setShown] = useState(false)
-  const closeReason = useRef<'hide' | 'settings'>('hide')
+  const closeReason = useRef<'hide'>('hide')
 
   useEffect(() => {
     const appWindow = getCurrentWebviewWindow()
@@ -67,18 +68,12 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
   const isHorizontal = layout === 'horizontal'
 
   return (
-    <AnimatePresence onExitComplete={() => {
-      if (closeReason.current === 'settings') {
-        onOpenSettings()
-      } else {
-        hideWindow()
-      }
-    }}>
+    <AnimatePresence onExitComplete={hideWindow}>
       {shown && (
         <motion.div
           className={[
             'flex flex-col bg-[var(--bg-primary)] overflow-hidden',
-            isHorizontal ? 'w-screen h-[380px]' : 'w-full h-screen',
+            isHorizontal ? 'w-screen h-[480px]' : 'w-full h-screen',
           ].join(' ')}
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -102,7 +97,7 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
               {isHorizontal && <TypeFilterBarInline />}
               {isHorizontal && (
                 <button
-                  onClick={() => { closeReason.current = 'settings'; setShown(false) }}
+                  onClick={() => invoke('open_settings_window')}
                   className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0 ml-1"
                 >
                   设置
@@ -131,7 +126,7 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => { closeReason.current = 'settings'; setShown(false) }}
+                    onClick={() => invoke('open_settings_window')}
                     className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                   >
                     设置

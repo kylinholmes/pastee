@@ -125,14 +125,35 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
         ) : isFiles ? (() => {
           const multiMatch = item.preview.match(/^(\d+) 个文件: (.+)$/)
           const names = multiMatch ? multiMatch[2].split(', ') : [item.preview]
+          const MAX_STACK = 3
+          const shown = names.slice(0, MAX_STACK)
+          const extra = names.length - MAX_STACK
           return (
-            <div className="flex gap-2 py-1 overflow-x-auto">
-              {names.map((name, i) => (
-                <div key={i} className="flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
-                  <FileIcon filename={name} size={48} />
-                  <span className="text-[8px] text-[var(--text-secondary)] truncate w-full text-center leading-tight">{name}</span>
-                </div>
-              ))}
+            <div className="flex flex-col items-center justify-center flex-1 gap-1.5">
+              {/* Stacked icons */}
+              <div className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
+                {shown.slice().reverse().map((name, ri) => {
+                  const i = shown.length - 1 - ri
+                  return (
+                    <div
+                      key={i}
+                      className="absolute rounded shadow-sm"
+                      style={{
+                        left: i * 6,
+                        top: -(i * 4),
+                        zIndex: i,
+                        opacity: 1 - i * 0.15,
+                      }}
+                    >
+                      <FileIcon filename={name} size={40} />
+                    </div>
+                  )
+                })}
+              </div>
+              <span className="text-[8px] text-[var(--text-secondary)] text-center leading-tight px-1 truncate w-full">
+                {names.length === 1 ? names[0] : `${names.length} 个文件`}
+                {extra > 0 && ` +${extra}`}
+              </span>
             </div>
           )
         })() : (
