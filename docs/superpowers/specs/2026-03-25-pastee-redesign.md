@@ -91,7 +91,7 @@ OCR requires a new `ocr_image(id)` Rust command. This is **out of scope for this
 | 动效 | `motion` |
 | 搜索+键盘导航 | `cmdk` |
 | 无障碍原语 | `@radix-ui/react-dialog` / `tooltip` / `scroll-area` |
-| 快捷键 | `react-hotkeys-hook` |
+| 快捷键 | `cmdk` onKeyDown（窗口内固定快捷键）；全局唤起由 Rust global-shortcut 管理，含冲突检测 + 30s 轮询重试 |
 | 设置持久化 | `@tauri-apps/plugin-store` |
 | 状态管理 | Zustand 5（已有） |
 | 图标 | Lucide React（已有） |
@@ -184,7 +184,7 @@ Separate window, sidebar navigation:
 |---------|---------|
 | General | Launch at login, layout preference (Auto/Vertical/Horizontal), history retention days, max item count |
 | Appearance | Theme (Dark / Light / System) |
-| Shortcuts | Activation hotkey (editable), keep window open toggle |
+| Shortcuts | Activation hotkey (editable via KeyRecorder component, conflict detection on save), keep window open toggle |
 | Storage | Clear unpinned now button |
 | OCR | Enable toggle (disabled until backend ready), model URL, API key — scaffolded only |
 | About | Version, open source link |

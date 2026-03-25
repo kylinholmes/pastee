@@ -45,7 +45,8 @@
 | 包 | 用途 |
 |---|---|
 | `cmdk` | 搜索框 + 键盘导航（专为 command palette 设计，↵/方向键/过滤全包） |
-| `react-hotkeys-hook` | 前端快捷键绑定（↵ 粘贴、⌫ 删除、方向键导航、Esc 关闭） |
+
+**不引入 `react-hotkeys-hook`。** 窗口内快捷键（Esc/⌫/⌘P）通过 cmdk 的 `onKeyDown` 回调处理，无需额外库。
 
 ## Tauri 插件
 
@@ -62,7 +63,6 @@
 bun add motion
 bun add cmdk
 bun add @radix-ui/react-dialog @radix-ui/react-tooltip @radix-ui/react-scroll-area
-bun add react-hotkeys-hook
 bun add @tauri-apps/plugin-store
 
 # 移除（已有但不再使用）
@@ -75,23 +75,23 @@ bun remove @base-ui-components/react
 
 ### Tailwind 样式约定
 
-```ts
-// 颜色 token（在 tailwind.config 或 CSS 变量中定义）
---color-bg-primary: #111111
---color-bg-secondary: #1a1a1a
---color-bg-elevated: #222222
---color-border: #2a2a2a
---color-text-primary: #e2e8f0
---color-text-secondary: #94a3b8
---color-text-muted: #475569
+```css
+/* 颜色 token（CSS 变量，在 index.css 中定义） */
+--color-bg-primary: #111111;
+--color-bg-secondary: #1a1a1a;
+--color-bg-elevated: #222222;
+--color-border: #2a2a2a;
+--color-text-primary: #e2e8f0;
+--color-text-secondary: #94a3b8;
+--color-text-muted: #475569;
 
-// 内容类型颜色
---color-type-text: #94a3b8    // Text
---color-type-html: #6366f1    // Html (Code/Rich Text)
---color-type-image: #f59e0b   // Image
---color-type-color: dynamic   // swatch
---color-type-files: #64748b   // Files
---color-queue: #f59e0b        // Queue group accent
+/* 内容类型颜色 */
+--color-type-text: #94a3b8;    /* Text */
+--color-type-html: #6366f1;    /* Html (Code/Rich Text) */
+--color-type-image: #f59e0b;   /* Image */
+--color-type-files: #64748b;   /* Files */
+--color-queue: #f59e0b;        /* Queue group accent */
+/* Color 类型：直接用 clip 的颜色值作为 swatch */
 ```
 
 ### motion 使用规范
@@ -120,15 +120,55 @@ transition: { duration: 0.15 }
 - `Command.Item` → ClipItem / ClipCard
 - `Command.Group` → QueueGroup / 类型分组
 
-键盘导航由 cmdk 内置处理，无需额外代码。
-
-### react-hotkeys-hook 使用规范
+键盘导航（方向键、↵）由 cmdk 内置处理。其余窗口内快捷键通过 `Command` 的 `onKeyDown` 处理：
 
 ```ts
-// 全局快捷键（窗口级别）
-useHotkeys('enter', handlePaste)
-useHotkeys('backspace', handleDelete)
-useHotkeys('mod+p', handlePin)
-useHotkeys('escape', handleClose)
-useHotkeys('arrowup, arrowdown', handleNavigate)
+<Command onKeyDown={(e) => {
+  if (e.key === 'Escape') handleClose()
+  if (e.key === 'Backspace' && !searchValue) handleDelete()
+  if ((e.metaKey || e.ctrlKey) && e.key === 'p') handlePin()
+}}>
+```
+
+---
+
+## 全局快捷键设计
+
+### 两层分离
+
+| 层 | 负责方 | 可自定义 |
+|---|---|---|
+| 系统级唤起快捷键 | Rust `global-shortcut` 插件 | ✅ 用户可改 |
+| 窗口内操作快捷键 | cmdk `onKeyDown` | ❌ 固定，不开放自定义 |
+
+窗口内快捷键固定设计：改了反而反直觉，不开放。
+
+### 全局快捷键冲突处理
+
+**原则：不 hack 系统保留键。** Win+V（Windows 内置剪贴板）、Cmd+Space（Spotlight）等系统级注册键不尝试覆盖，设置页提示用户回避。
+
+**冲突检测流程：**
+
+用户在设置页录制新快捷键 → 前端捕获 `keydown` 组合 → 调用 Rust `register_hotkey(keys)` 尝试注册：
+
+```
+注册成功 → 保存到 settingsStore → 持久化
+注册失败 → 回滚到旧快捷键 → 设置页显示 "该快捷键已被占用，请换一个"
+```
+
+**冲突恢复（A + C 方案）：**
+
+- **主动通知（A）：** 快捷键被其他程序抢占时（app 启动或重新注册失败），托盘图标变为警告色 + 发送系统通知："快捷键 Ctrl+Shift+V 已失效，请在设置里更换"
+- **静默轮询重试（C）：** 后台每 30 秒尝试重新注册当前快捷键。若某次成功（冲突 app 已关闭），自动恢复，托盘图标恢复正常，无需用户介入
+
+**轮询实现：** Rust 侧 `tokio::time::interval` 定时任务，注册成功后取消轮询，通过 Tauri 事件 `hotkey://restored` 通知前端更新托盘状态。
+
+### 快捷键录制组件（Settings → Shortcuts）
+
+```ts
+// KeyRecorder 组件行为
+onKeyDown: 捕获组合键（modifier + key）
+显示：Ctrl + Shift + V 样式的 kbd 标签
+确认：调用 register_hotkey，等待结果
+失败：inline 错误提示 + 恢复旧值
 ```
