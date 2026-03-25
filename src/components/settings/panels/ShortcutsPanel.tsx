@@ -1,0 +1,36 @@
+import { useSettingsStore } from '../../../store/settingsStore'
+
+export function ShortcutsPanel() {
+  const { activationHotkey, keepWindowOpen, update } = useSettingsStore()
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <h2 className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">快捷键</h2>
+      <div className="flex items-center justify-between py-2 border-b border-[var(--border-subtle)]">
+        <div>
+          <p className="text-xs text-[var(--text-primary)]">唤起窗口</p>
+          <p className="text-[10px] text-[var(--text-muted)] mt-0.5">全局快捷键</p>
+        </div>
+        <div className="flex gap-1">
+          {activationHotkey.split('+').map(k => (
+            <kbd key={k} className="px-1.5 py-0.5 bg-[var(--bg-elevated)] border border-[var(--border)] rounded text-[10px] text-[var(--text-secondary)]">{k}</kbd>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-between py-2">
+        <p className="text-xs text-[var(--text-primary)]">保持窗口开启</p>
+        <button
+          onClick={() => update('keepWindowOpen', !keepWindowOpen)}
+          className={[
+            'w-8 h-4 rounded-full transition-colors relative',
+            keepWindowOpen ? 'bg-[var(--accent)]' : 'bg-[var(--bg-elevated)]',
+          ].join(' ')}
+        >
+          <span className={[
+            'absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform',
+            keepWindowOpen ? 'translate-x-4' : 'translate-x-0.5',
+          ].join(' ')} />
+        </button>
+      </div>
+    </div>
+  )
+}
