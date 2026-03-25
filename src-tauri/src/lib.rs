@@ -182,6 +182,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>) {
         })
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             get_recent_clips,
             get_total_count,
