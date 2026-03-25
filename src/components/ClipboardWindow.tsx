@@ -1,7 +1,7 @@
 // src/components/ClipboardWindow.tsx
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { Command } from 'cmdk'
 import { useClipStore } from '../store/clipStore'
 import { useQueueStore } from '../store/queueStore'
@@ -51,14 +51,13 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
   const isHorizontal = layout === 'horizontal'
 
   return (
-    <AnimatePresence>
       <motion.div
         className={[
           'flex flex-col bg-[var(--bg-primary)] overflow-hidden',
           isHorizontal ? 'w-screen h-[220px]' : 'w-full h-screen',
         ].join(' ')}
-        initial={isHorizontal ? { y: '100%', opacity: 0 } : { opacity: 0, scale: 0.97 }}
-        animate={isHorizontal ? { y: 0, opacity: 1 } : { opacity: 1, scale: 1 }}
+        initial={false}
+        animate={isHorizontal ? { y: 0 } : { scale: 1 }}
         transition={isHorizontal
           ? { type: 'spring', damping: 30, stiffness: 300 }
           : { duration: 0.12 }
@@ -112,6 +111,5 @@ export function ClipboardWindow({ onOpenSettings }: Props) {
           )}
         </Command>
       </motion.div>
-    </AnimatePresence>
   )
 }

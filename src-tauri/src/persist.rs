@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use rusqlite_migration::{Migrations, M};
@@ -65,6 +66,7 @@ pub enum ClipData {
 pub struct Storage {
     conn: Connection,
     image_dir: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl Storage {
@@ -85,7 +87,11 @@ impl Storage {
 
         Self::migrate(&mut conn)?;
 
-        Ok(Self { conn, image_dir })
+        Ok(Self { conn, image_dir, data_dir })
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     fn migrate(conn: &mut Connection) -> Result<()> {
@@ -214,10 +220,18 @@ impl Storage {
                     }
                 },
                 ClipType::Files => {
-                    // 尝试解析 JSON 看看有几个文件
                     if let Some(json) = files_json {
                         if let Ok(paths) = serde_json::from_str::<Vec<String>>(&json) {
-                            format!("[文件] {} 个项目: {}", paths.len(), paths.first().unwrap_or(&"".to_string()))
+                            let names: Vec<String> = paths.iter()
+                                .map(|p| Path::new(p).file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| p.clone()))
+                                .collect();
+                            if names.len() == 1 {
+                                names[0].clone()
+                            } else {
+                                format!("{} 个文件: {}", names.len(), names.join(", "))
+                            }
                         } else {
                             "[文件列表]".to_string()
                         }
@@ -357,6 +371,47 @@ impl Storage {
             },
         )
         .context("Failed to get image paths")
+    }
+
+    /// Get thumbnail as base64 string. If thumbnail file is missing, regenerate from original.
+    pub fn get_thumbnail_base64(&self, id: i64) -> Result<Option<String>> {
+        let (image_rel, thumb_rel) = match self.get_image_paths(id) {
+            Ok(paths) => paths,
+            Err(_) => return Ok(None),
+        };
+
+        let thumb_full = self.image_dir.join(&thumb_rel);
+
+        // Try reading existing thumbnail
+        if let Ok(bytes) = fs::read(&thumb_full) {
+            let b64 = general_purpose::STANDARD.encode(&bytes);
+            return Ok(Some(b64));
+        }
+
+        // Thumbnail missing — regenerate from original
+        let orig_full = self.image_dir.join(&image_rel);
+        let orig_bytes = match fs::read(&orig_full) {
+            Ok(b) => b,
+            Err(_) => return Ok(None),
+        };
+
+        let img = image::load_from_memory(&orig_bytes)
+            .context("Failed to load original image")?;
+        let thumbnail_img = img.thumbnail(800, 600);
+
+        let mut webp_buffer = Vec::new();
+        let webp_encoder = image::codecs::webp::WebPEncoder::new_lossless(&mut webp_buffer);
+        thumbnail_img.write_with_encoder(webp_encoder)
+            .context("Failed to encode thumbnail")?;
+
+        // Save regenerated thumbnail
+        if let Some(parent) = thumb_full.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&thumb_full, &webp_buffer);
+
+        let b64 = general_purpose::STANDARD.encode(&webp_buffer);
+        Ok(Some(b64))
     }
 
     // ==========================================

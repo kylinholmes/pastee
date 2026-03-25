@@ -37,23 +37,32 @@ interface SettingsStore extends Settings {
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
 }
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
+export const useSettingsStore = create<SettingsStore>((set) => ({
   ...DEFAULTS,
   loaded: false,
 
   load: async () => {
-    const entries = await Promise.all(
-      (Object.keys(DEFAULTS) as (keyof Settings)[]).map(async (key) => {
-        const val = await store.get<Settings[typeof key]>(key)
-        return [key, val ?? DEFAULTS[key]] as const
-      })
-    )
-    set({ ...Object.fromEntries(entries), loaded: true } as any)
+    try {
+      const entries = await Promise.all(
+        (Object.keys(DEFAULTS) as (keyof Settings)[]).map(async (key) => {
+          const val = await store.get<Settings[typeof key]>(key)
+          return [key, val ?? DEFAULTS[key]] as const
+        })
+      )
+      set({ ...Object.fromEntries(entries), loaded: true } as any)
+    } catch (e) {
+      console.warn('Settings load failed, using defaults:', e)
+      set({ loaded: true })
+    }
   },
 
   update: async (key, value) => {
     set({ [key]: value } as any)
-    await store.set(key, value)
-    await store.save()
+    try {
+      await store.set(key, value)
+      await store.save()
+    } catch (e) {
+      console.warn('Settings save failed:', e)
+    }
   },
 }))

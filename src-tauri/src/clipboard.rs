@@ -21,14 +21,17 @@ pub struct SystemHook {
     // 用于防抖 (Debounce)：记录上一次内容的哈希和时间
     pub last_hash: Arc<Mutex<String>>,
     pub last_update: Arc<Mutex<Instant>>,
+    // Skip flag: set by paste_clip to ignore the next clipboard change we caused
+    pub skip_next: Arc<Mutex<bool>>,
 }
 
 impl SystemHook {
-    pub fn new(sender: Sender<ClipEvent>) -> Self {
+    pub fn new(sender: Sender<ClipEvent>, skip_next: Arc<Mutex<bool>>) -> Self {
         Self {
             sender,
             last_hash: Arc::new(Mutex::new(String::new())),
             last_update: Arc::new(Mutex::new(Instant::now())),
+            skip_next,
         }
     }
 
@@ -54,6 +57,15 @@ impl SystemHook {
 impl ClipboardHandler for SystemHook {
     // 核心：当系统发生“复制”事件时，操作系统自动回调此函数
     fn on_clipboard_change(&mut self) -> CallbackResult {
+        // Check skip flag (set by paste_clip to ignore our own writes)
+        if let Ok(mut skip) = self.skip_next.lock() {
+            if *skip {
+                *skip = false;
+                println!(">> ⏭️  跳过自身写入的剪贴板变化");
+                return CallbackResult::Next;
+            }
+        }
+
         println!(">> ⚡ 底层事件触发 (Hook Triggered)");
 
         // 1. 初始化读取器 (每次读取都建议新建实例以获取最新状态)

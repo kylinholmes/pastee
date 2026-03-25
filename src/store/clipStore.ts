@@ -26,7 +26,6 @@ interface ClipStore {
   thumbnailCache: Map<number, string>
   totalCount: number
 
-  displayList: () => ClipItem[]
   setSearchQuery: (query: string) => void
   setFilterType: (type: ClipType | '') => void
   setOffset: (offset: number) => void
@@ -48,15 +47,6 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   thumbnailCache: new Map(),
   totalCount: 0,
 
-  displayList: () => {
-    const { searchQuery, searchResults, allClips, filterType } = get()
-    let list = searchQuery.trim() ? searchResults : allClips
-    if (filterType) {
-      list = list.filter(item => item.content_type === filterType)
-    }
-    return list
-  },
-
   setSearchQuery: (query) => {
     set({ searchQuery: query })
     get().handleSearch(query)
@@ -70,9 +60,22 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   },
 
   fetchAllClips: async () => {
-    const { limit, offset } = get()
+    const { limit, offset, thumbnailCache } = get()
     const result = await invoke<ClipItem[]>('get_recent_clips', { limit, offset })
     set({ allClips: result })
+
+    // Load thumbnails for Image items not yet cached
+    const imageItems = result.filter(item => item.content_type === 'Image' && !thumbnailCache.has(item.id))
+    if (imageItems.length > 0) {
+      const cache = new Map(get().thumbnailCache)
+      await Promise.all(imageItems.map(async (item) => {
+        try {
+          const b64 = await invoke<string | null>('get_thumbnail', { id: item.id })
+          if (b64) cache.set(item.id, `data:image/webp;base64,${b64}`)
+        } catch {}
+      }))
+      set({ thumbnailCache: cache })
+    }
   },
 
   fetchTotalCount: async () => {
@@ -159,3 +162,4 @@ export const useClipStore = create<ClipStore>((set, get) => ({
     }
   },
 }))
+

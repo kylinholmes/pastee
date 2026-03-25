@@ -1,5 +1,8 @@
 // src/components/vertical/ClipItem.tsx
+import { useState, useEffect } from 'react'
 import { ClipItem as ClipItemType, useClipStore } from '../../store/clipStore'
+import { invoke } from '@tauri-apps/api/core'
+import { File } from 'lucide-react'
 
 const TYPE_BAR_COLORS: Record<string, string> = {
   Text: 'bg-[#94a3b8]',
@@ -17,6 +20,65 @@ const TYPE_LABELS: Record<string, string> = {
   Files: '文件',
 }
 
+// Global icon cache: ext -> data:image/png;base64,...
+const iconCache = new Map<string, string>()
+
+async function loadFileIcon(ext: string): Promise<string | null> {
+  if (!ext) return null
+  const cached = iconCache.get(ext)
+  if (cached) return cached
+  try {
+    const b64 = await invoke<string | null>('get_file_icon', { extension: ext })
+    if (b64) {
+      const url = `data:image/png;base64,${b64}`
+      iconCache.set(ext, url)
+      return url
+    }
+  } catch {}
+  return null
+}
+
+function parseFileNames(preview: string): string[] {
+  const multiMatch = preview.match(/^(\d+) 个文件: (.+)$/)
+  if (multiMatch) return multiMatch[2].split(', ')
+  return [preview]
+}
+
+function getExt(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? ''
+}
+
+function FileIcon({ filename, size = 32 }: { filename: string; size?: number }) {
+  const ext = getExt(filename)
+  const [src, setSrc] = useState<string | null>(iconCache.get(ext) ?? null)
+
+  useEffect(() => {
+    if (!src && ext) {
+      loadFileIcon(ext).then(url => { if (url) setSrc(url) })
+    }
+  }, [ext, src])
+
+  if (src) {
+    return <img src={src} alt={ext} style={{ width: size, height: size }} className="flex-shrink-0 object-contain" />
+  }
+  return <File size={size} className="flex-shrink-0 text-[var(--text-muted)]" />
+}
+
+function FilePreview({ preview }: { preview: string }) {
+  const names = parseFileNames(preview)
+
+  return (
+    <div className="flex gap-3 py-1 overflow-x-auto">
+      {names.map((name, i) => (
+        <div key={i} className="flex flex-col items-center gap-1 w-16 flex-shrink-0">
+          <FileIcon filename={name} size={48} />
+          <span className="text-[9px] text-[var(--text-secondary)] truncate w-full text-center leading-tight">{name}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 interface Props {
   item: ClipItemType
   isSelected?: boolean
@@ -31,11 +93,22 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
     hour: '2-digit', minute: '2-digit'
   })
 
+  const handlePaste = async () => {
+    if (item.loading) return
+    try {
+      await invoke('paste_clip', { id: item.id })
+      await invoke('toggle_window')
+    } catch (e) {
+      console.error('Paste failed:', e)
+    }
+  }
+
   return (
     <div
-      onClick={onClick}
+      onClick={() => { onClick?.(); handlePaste() }}
       className={[
         'group flex items-start gap-2.5 px-3 py-2.5 mx-2 rounded-lg cursor-pointer transition-colors',
+        'border-b border-[var(--border-subtle)]',
         isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-hover)]',
       ].join(' ')}
     >
@@ -62,14 +135,16 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
               <img
                 src={thumbnailCache.get(item.id)}
                 alt="clip"
-                className="h-10 w-16 object-cover rounded"
+                className="h-28 w-44 object-cover rounded"
               />
             ) : (
-              <div className="h-10 w-16 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
+              <div className="h-28 w-44 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
                 <span className="text-xs text-[var(--text-muted)]">图片</span>
               </div>
             )}
           </div>
+        ) : item.content_type === 'Files' ? (
+          <FilePreview preview={item.preview} />
         ) : (
           <p className="text-sm text-[var(--text-primary)] truncate leading-snug">{item.preview}</p>
         )}

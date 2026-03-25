@@ -15,6 +15,170 @@ use tauri::{Manager, Emitter, AppHandle};
 
 use crate::persist::ClipData;
 
+#[cfg(target_os = "windows")]
+fn get_cursor_position() -> Option<(i32, i32)> {
+    use std::mem::MaybeUninit;
+    #[repr(C)]
+    struct POINT { x: i32, y: i32 }
+    extern "system" { fn GetCursorPos(lp_point: *mut POINT) -> i32; }
+    unsafe {
+        let mut pt = MaybeUninit::<POINT>::uninit();
+        if GetCursorPos(pt.as_mut_ptr()) != 0 {
+            let pt = pt.assume_init();
+            Some((pt.x, pt.y))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_cursor_position() -> Option<(i32, i32)> {
+    None
+}
+
+/// Extract system file icon for a given extension, returns base64 PNG
+#[cfg(target_os = "windows")]
+fn extract_file_icon(extension: &str) -> Option<Vec<u8>> {
+    use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES};
+    use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO, DestroyIcon};
+    use windows::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, DeleteDC, SelectObject, GetDIBits,
+        BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetObjectW, BITMAP,
+    };
+    use windows::core::PCWSTR;
+    use std::mem;
+
+    unsafe {
+        // Create a dummy filename like "file.ext"
+        let dummy: Vec<u16> = format!("file.{}\0", extension).encode_utf16().collect();
+        let mut shfi: SHFILEINFOW = mem::zeroed();
+
+        let result = SHGetFileInfoW(
+            PCWSTR(dummy.as_ptr()),
+            windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL,
+            Some(&mut shfi),
+            mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES,
+        );
+
+        if result == 0 || shfi.hIcon.is_invalid() {
+            return None;
+        }
+
+        let hicon = shfi.hIcon;
+
+        // Get icon info to access the bitmap
+        let mut icon_info: ICONINFO = mem::zeroed();
+        if GetIconInfo(hicon, &mut icon_info).is_err() {
+            DestroyIcon(hicon).ok();
+            return None;
+        }
+
+        let hbm_color = icon_info.hbmColor;
+        let hbm_mask = icon_info.hbmMask;
+
+        // Get bitmap dimensions
+        let mut bm: BITMAP = mem::zeroed();
+        if GetObjectW(hbm_color, mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _)) == 0 {
+            DeleteObject(hbm_color).ok();
+            DeleteObject(hbm_mask).ok();
+            DestroyIcon(hicon).ok();
+            return None;
+        }
+
+        let width = bm.bmWidth as u32;
+        let height = bm.bmHeight as u32;
+
+        // Setup BITMAPINFO for 32-bit BGRA
+        let mut bmi: BITMAPINFO = mem::zeroed();
+        bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = width as i32;
+        bmi.bmiHeader.biHeight = -(height as i32); // top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = 0; // BI_RGB
+
+        let hdc = CreateCompatibleDC(None);
+        let old = SelectObject(hdc, hbm_color);
+
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        GetDIBits(
+            hdc, hbm_color, 0, height,
+            Some(pixels.as_mut_ptr() as *mut _),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        SelectObject(hdc, old);
+        DeleteDC(hdc).ok();
+        DeleteObject(hbm_color).ok();
+        DeleteObject(hbm_mask).ok();
+        DestroyIcon(hicon).ok();
+
+        // Convert BGRA to RGBA
+        for chunk in pixels.chunks_exact_mut(4) {
+            chunk.swap(0, 2); // B <-> R
+        }
+
+        // Encode as PNG using the image crate
+        let img = image::RgbaImage::from_raw(width, height, pixels)?;
+        let mut png_buf = Vec::new();
+        let encoder = image::codecs::png::PngEncoder::new(&mut png_buf);
+        img.write_with_encoder(encoder).ok()?;
+
+        Some(png_buf)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn extract_file_icon(_extension: &str) -> Option<Vec<u8>> {
+    None
+}
+
+/// Position window near cursor, using the monitor the cursor is actually on
+fn position_window_at_cursor(window: &tauri::WebviewWindow) {
+    let (cx, cy) = match get_cursor_position() {
+        Some(pos) => pos,
+        None => return,
+    };
+
+    // Find the monitor that contains the cursor
+    let monitor = window.available_monitors().ok()
+        .and_then(|monitors| {
+            monitors.into_iter().find(|m| {
+                let pos = m.position();
+                let size = m.size();
+                cx >= pos.x && cx < pos.x + size.width as i32
+                    && cy >= pos.y && cy < pos.y + size.height as i32
+            })
+        })
+        .or_else(|| window.current_monitor().ok().flatten());
+
+    let monitor = match monitor {
+        Some(m) => m,
+        None => return,
+    };
+
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let win_size = window.outer_size().unwrap_or(tauri::PhysicalSize { width: 420, height: 750 });
+
+    let mon_right = mon_pos.x + mon_size.width as i32;
+    let mon_bottom = mon_pos.y + mon_size.height as i32;
+    let w = win_size.width as i32;
+    let h = win_size.height as i32;
+
+    let mut x = cx;
+    let mut y = cy;
+    if x + w > mon_right { x = mon_right - w; }
+    if y + h > mon_bottom { y = mon_bottom - h; }
+    if x < mon_pos.x { x = mon_pos.x; }
+    if y < mon_pos.y { y = mon_pos.y; }
+
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
 #[tauri::command]
 fn get_recent_clips(
     state: tauri::State<AppState>, 
@@ -90,6 +254,53 @@ fn toggle_pin(
 }
 
 #[tauri::command]
+fn get_thumbnail(
+    state: tauri::State<AppState>,
+    id: i64,
+) -> Result<Option<String>, String> {
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    storage.get_thumbnail_base64(id).map_err(|e| e.to_string())
+}
+
+/// Get system file icon for a file extension, returns base64 PNG.
+/// Icons are cached to disk at {data_dir}/icon/{platform}/{ext}.png
+#[tauri::command]
+fn get_file_icon(state: tauri::State<AppState>, extension: String) -> Result<Option<String>, String> {
+    let ext = extension.trim_start_matches('.').to_lowercase();
+    if ext.is_empty() {
+        return Ok(None);
+    }
+
+    // Cache path: ~/Documents/pastee/icon/{platform}/{ext}.png
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    let data_dir = storage.data_dir();
+    let platform = if cfg!(target_os = "windows") { "windows" }
+        else if cfg!(target_os = "macos") { "macos" }
+        else { "linux" };
+    let icon_dir = data_dir.join("icon").join(platform);
+    let cache_path = icon_dir.join(format!("{}.png", ext));
+
+    // Check cache first
+    if cache_path.exists() {
+        if let Ok(bytes) = std::fs::read(&cache_path) {
+            let b64 = general_purpose::STANDARD.encode(&bytes);
+            return Ok(Some(b64));
+        }
+    }
+
+    // Extract from system and cache
+    match extract_file_icon(&ext) {
+        Some(png_bytes) => {
+            let _ = std::fs::create_dir_all(&icon_dir);
+            let _ = std::fs::write(&cache_path, &png_bytes);
+            let b64 = general_purpose::STANDARD.encode(&png_bytes);
+            Ok(Some(b64))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
 fn delete_clip(
     state: tauri::State<AppState>,
     id: i64
@@ -107,8 +318,53 @@ fn toggle_window(app: AppHandle) -> Result<(), String> {
         if window.is_visible().unwrap_or(false) {
             window.hide().map_err(|e| e.to_string())?;
         } else {
+            // Position window near cursor (works across monitors)
+            position_window_at_cursor(&window);
             window.show().map_err(|e| e.to_string())?;
             window.set_focus().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn paste_clip(
+    state: tauri::State<AppState>,
+    id: i64,
+) -> Result<(), String> {
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    let content = storage.get_content(id).map_err(|e| e.to_string())?;
+
+    // Set skip flag so clipboard listener ignores our own write
+    if let Ok(mut skip) = state.skip_next_clip.lock() {
+        *skip = true;
+    }
+
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    match content {
+        ClipData::Text(text) => {
+            clipboard.set_text(&text).map_err(|e| e.to_string())?;
+        }
+        ClipData::Html { text, html } => {
+            clipboard.set_html(&html, Some(&text)).map_err(|e| e.to_string())?;
+        }
+        ClipData::Image(bytes) => {
+            let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            let img_data = arboard::ImageData {
+                width: w as usize,
+                height: h as usize,
+                bytes: rgba.into_raw().into(),
+            };
+            clipboard.set_image(img_data).map_err(|e| e.to_string())?;
+        }
+        ClipData::Files(files) => {
+            // For files, copy the file paths as text
+            clipboard.set_text(&files.join("\n")).map_err(|e| e.to_string())?;
+        }
+        ClipData::Color(color) => {
+            clipboard.set_text(&color).map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -158,25 +414,27 @@ fn get_image_url(
 struct AppState {
     storage: Mutex<Storage>,
     keep_window_open: Arc<Mutex<bool>>,
+    skip_next_clip: Arc<Mutex<bool>>,
 }
 
 impl AppState {
-    fn new(data_dir: std::path::PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(data_dir: std::path::PathBuf, skip_next_clip: Arc<Mutex<bool>>) -> Result<Self, Box<dyn std::error::Error>> {
         let storage = Storage::new(&data_dir)?;
         Ok(AppState {
             storage: Mutex::new(storage),
             keep_window_open: Arc::new(Mutex::new(false)),
+            skip_next_clip,
         })
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>) {
+pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip: Arc<Mutex<bool>>) {
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             setup_tray(app)?;
             setup_global_shortcut(app)?;
-            setup_storage_and_clipboard(app, rx)?;
+            setup_storage_and_clipboard(app, rx, skip_next_clip)?;
             setup_window_events(app)?;
             Ok(())
         })
@@ -195,6 +453,9 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>) {
             set_keep_window_open,
             open_accessibility_settings,
             get_image_url,
+            get_thumbnail,
+            get_file_icon,
+            paste_clip,
         ])
         .on_window_event(|_window, event| {
             match event {
@@ -428,6 +689,7 @@ fn setup_global_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error:
     
     if let Ok(()) = app.global_shortcut().on_shortcut(shortcut, move |app_handle, _shortcut, _event| {
         if let Some(window) = app_handle.get_webview_window("main") {
+            position_window_at_cursor(&window);
             let _ = window.show();
             let _ = window.set_focus();
         }
@@ -446,12 +708,13 @@ fn setup_global_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error:
 fn setup_storage_and_clipboard(
     app: &mut tauri::App,
     rx: crossbeam_channel::Receiver<clipboard::ClipEvent>,
+    skip_next_clip: Arc<Mutex<bool>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 使用 $HOME/Documents/pastee 作为数据目录
     let home = dirs::home_dir().ok_or("Failed to get home directory")?;
     let data_dir = home.join("Documents").join("pastee");
-    
-    let app_state = AppState::new(data_dir.clone()).map_err(|e| e.to_string())?;
+
+    let app_state = AppState::new(data_dir.clone(), skip_next_clip).map_err(|e| e.to_string())?;
     let shared_storage = Arc::new(Mutex::new(
         Storage::new(&data_dir).map_err(|e| e.to_string())?
     ));
@@ -473,6 +736,18 @@ fn setup_storage_and_clipboard(
 fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 窗口失去焦点时自动隐藏（除非设置了保持打开）
     if let Some(window) = app.get_webview_window("main") {
+        // Apply vibrancy effect
+        #[cfg(target_os = "windows")]
+        {
+            use window_vibrancy::apply_acrylic;
+            let _ = apply_acrylic(&window, Some((17, 17, 17, 180)));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
+        }
+
         let window_clone = window.clone();
         let app_handle = app.handle().clone();
         window.on_window_event(move |event| {

@@ -1,5 +1,8 @@
 // src/components/horizontal/ClipCard.tsx
+import { useState, useEffect } from 'react'
 import { ClipItem, useClipStore } from '../../store/clipStore'
+import { invoke } from '@tauri-apps/api/core'
+import { File } from 'lucide-react'
 
 const TYPE_BORDER_COLORS: Record<string, string> = {
   Text: 'border-[rgba(148,163,184,0.2)]',
@@ -21,6 +24,44 @@ const TYPE_LABELS: Record<string, string> = {
   Text: '文本', Html: 'Html', Image: '图片', Color: '颜色', Files: '文件',
 }
 
+// Global icon cache: ext -> data:image/png;base64,...
+const iconCache = new Map<string, string>()
+
+async function loadFileIcon(ext: string): Promise<string | null> {
+  if (!ext) return null
+  const cached = iconCache.get(ext)
+  if (cached) return cached
+  try {
+    const b64 = await invoke<string | null>('get_file_icon', { extension: ext })
+    if (b64) {
+      const url = `data:image/png;base64,${b64}`
+      iconCache.set(ext, url)
+      return url
+    }
+  } catch {}
+  return null
+}
+
+function getExt(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? ''
+}
+
+function FileIcon({ filename, size = 24 }: { filename: string; size?: number }) {
+  const ext = getExt(filename)
+  const [src, setSrc] = useState<string | null>(iconCache.get(ext) ?? null)
+
+  useEffect(() => {
+    if (!src && ext) {
+      loadFileIcon(ext).then(url => { if (url) setSrc(url) })
+    }
+  }, [ext, src])
+
+  if (src) {
+    return <img src={src} alt={ext} style={{ width: size, height: size }} className="flex-shrink-0 object-contain" />
+  }
+  return <File size={size} className="flex-shrink-0 text-[var(--text-muted)]" />
+}
+
 interface Props {
   item: ClipItem
   isSelected?: boolean
@@ -35,11 +76,25 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
     hour: '2-digit', minute: '2-digit'
   })
 
+  const handlePaste = async () => {
+    if (item.loading) return
+    try {
+      await invoke('paste_clip', { id: item.id })
+      await invoke('toggle_window')
+    } catch (e) {
+      console.error('Paste failed:', e)
+    }
+  }
+
+  const isImage = item.content_type === 'Image'
+  const isFiles = item.content_type === 'Files'
+  const cardWidth = isImage || isFiles ? 'w-44' : 'w-36'
+
   return (
     <div
-      onClick={onClick}
+      onClick={() => { onClick?.(); handlePaste() }}
       className={[
-        'group flex-shrink-0 w-36 flex flex-col rounded-xl border bg-[var(--bg-secondary)] p-2.5 cursor-pointer transition-all',
+        `group flex-shrink-0 ${cardWidth} flex flex-col rounded-xl border bg-[var(--bg-secondary)] p-2.5 cursor-pointer transition-all`,
         borderColor,
         isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] ring-opacity-40' : 'hover:border-opacity-60',
       ].join(' ')}
@@ -59,15 +114,28 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
             />
             <span className="text-[10px] text-[var(--text-secondary)] truncate">{item.preview}</span>
           </div>
-        ) : item.content_type === 'Image' ? (
+        ) : isImage ? (
           thumbnailCache.get(item.id) ? (
-            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-16 object-cover rounded" />
+            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-28 object-cover rounded" />
           ) : (
-            <div className="w-full h-16 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
+            <div className="w-full h-28 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
               <span className="text-xs text-[var(--text-muted)]">🖼</span>
             </div>
           )
-        ) : (
+        ) : isFiles ? (() => {
+          const multiMatch = item.preview.match(/^(\d+) 个文件: (.+)$/)
+          const names = multiMatch ? multiMatch[2].split(', ') : [item.preview]
+          return (
+            <div className="flex gap-2 py-1 overflow-x-auto">
+              {names.map((name, i) => (
+                <div key={i} className="flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
+                  <FileIcon filename={name} size={48} />
+                  <span className="text-[8px] text-[var(--text-secondary)] truncate w-full text-center leading-tight">{name}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })() : (
           <p className="text-[10px] text-[var(--text-primary)] line-clamp-4 leading-relaxed">{item.preview}</p>
         )}
       </div>
