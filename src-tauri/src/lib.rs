@@ -1145,7 +1145,7 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
         #[cfg(target_os = "windows")]
         {
             use window_vibrancy::apply_acrylic;
-            let _ = apply_acrylic(&window, Some((17, 17, 17, 180)));
+            let _ = apply_acrylic(&window, Some((31, 31, 31, 190)));
         }
         #[cfg(target_os = "macos")]
         {

@@ -2,23 +2,10 @@
 import { useState, useEffect } from 'react'
 import { ClipItem as ClipItemType, useClipStore } from '../../store/clipStore'
 import { invoke } from '@tauri-apps/api/core'
-import { File } from 'lucide-react'
-
-const TYPE_BAR_COLORS: Record<string, string> = {
-  Text: 'bg-[#94a3b8]',
-  Html: 'bg-[#6366f1]',
-  Image: 'bg-[#f59e0b]',
-  Color: 'bg-[#94a3b8]',
-  Files: 'bg-[#64748b]',
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  Text: '文本',
-  Html: 'Html',
-  Image: '图片',
-  Color: '颜色',
-  Files: '文件',
-}
+import {
+  File, FileText, Code, ImageIcon, Palette, Link as LinkIcon,
+  Pin, PinOff, Trash2,
+} from 'lucide-react'
 
 // Global icon cache: ext -> data:image/png;base64,...
 const iconCache = new Map<string, string>()
@@ -48,7 +35,7 @@ function getExt(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() ?? ''
 }
 
-function FileIcon({ filename, size = 32 }: { filename: string; size?: number }) {
+function FileIconComponent({ filename, size = 32 }: { filename: string; size?: number }) {
   const ext = getExt(filename)
   const [src, setSrc] = useState<string | null>(iconCache.get(ext) ?? null)
 
@@ -68,15 +55,41 @@ function FilePreview({ preview }: { preview: string }) {
   const names = parseFileNames(preview)
 
   return (
-    <div className="flex gap-3 py-1 overflow-x-auto">
+    <div className="flex gap-3 py-0.5 overflow-x-auto">
       {names.map((name, i) => (
-        <div key={i} className="flex flex-col items-center gap-1 w-16 flex-shrink-0">
-          <FileIcon filename={name} size={48} />
-          <span className="text-[9px] text-[var(--text-secondary)] truncate w-full text-center leading-tight">{name}</span>
+        <div key={i} className="flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
+          <FileIconComponent filename={name} size={40} />
+          <span className="text-[9px] text-[var(--text-muted)] truncate w-full text-center leading-tight">{name}</span>
         </div>
       ))}
     </div>
   )
+}
+
+/** Relative time: 2m, 15m, 1h, 2h, 1d etc. */
+function relativeTime(microsTs: number): string {
+  const ms = microsTs / 1000
+  const diff = Date.now() - ms
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
+
+/** Type-specific line icon */
+function TypeIcon({ type, className }: { type: string; className?: string }) {
+  const props = { size: 16, className: className ?? 'text-[var(--text-muted)]' }
+  switch (type) {
+    case 'Text': return <FileText {...props} />
+    case 'Html': return <Code {...props} />
+    case 'Image': return <ImageIcon {...props} />
+    case 'Color': return <Palette {...props} />
+    case 'Files': return <File {...props} />
+    default: return <LinkIcon {...props} />
+  }
 }
 
 interface Props {
@@ -87,11 +100,16 @@ interface Props {
 
 export function ClipItem({ item, isSelected, onClick }: Props) {
   const { handlePin, handleDelete, thumbnailCache } = useClipStore()
-  const barColor = TYPE_BAR_COLORS[item.content_type] ?? 'bg-[var(--text-muted)]'
-  const typeLabel = TYPE_LABELS[item.content_type] ?? item.content_type
-  const timeStr = new Date(item.created_at / 1000).toLocaleTimeString('zh-CN', {
-    hour: '2-digit', minute: '2-digit'
-  })
+  const isLink = item.tags?.includes('link')
+  const iconType = isLink ? 'Link' : item.content_type
+  const timeStr = relativeTime(item.created_at)
+
+  // Source metadata
+  const source = item.source ?? ''
+  const metaParts: string[] = []
+  if (source) metaParts.push(source)
+  if (isLink && item.link_domain) metaParts.push(item.link_domain)
+  if (item.content_type === 'Color') metaParts.push('Color Value')
 
   const handlePaste = async () => {
     if (item.loading) return
@@ -107,76 +125,97 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
     <div
       onClick={() => { onClick?.(); handlePaste() }}
       className={[
-        'group flex items-start gap-2.5 px-3 py-2.5 mx-2 rounded-lg cursor-pointer transition-colors',
-        'border-b border-[var(--border-subtle)]',
+        'group flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors relative',
         isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-hover)]',
       ].join(' ')}
     >
-      {/* Color accent bar */}
-      <div className={`w-0.5 h-full min-h-[28px] rounded-full flex-shrink-0 mt-0.5 ${barColor}`} />
+      {/* Pinned accent bar */}
+      {item.is_pinned && (
+        <div className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-[var(--accent)]" />
+      )}
+
+      {/* Type icon */}
+      <div className="flex-shrink-0 w-8 h-8 rounded flex items-center justify-center bg-[var(--bg-secondary)]">
+        {item.content_type === 'Color' ? (
+          <div
+            className="w-5 h-5 rounded-full border border-[var(--type-color-border)]"
+            style={{ backgroundColor: item.preview }}
+          />
+        ) : item.content_type === 'Image' && thumbnailCache.get(item.id) ? (
+          <img
+            src={thumbnailCache.get(item.id)}
+            alt="clip"
+            className="w-8 h-8 object-cover rounded"
+          />
+        ) : isLink && item.link_favicon ? (
+          <img src={item.link_favicon} alt="" className="w-4 h-4 rounded-sm" />
+        ) : (
+          <TypeIcon type={iconType} />
+        )}
+      </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         {item.loading ? (
-          <div className="flex items-center gap-2 py-1">
-            <span className="text-xs text-[var(--text-muted)] animate-pulse">处理中...</span>
-          </div>
+          <span className="text-xs text-[var(--text-muted)] animate-pulse">处理中...</span>
         ) : item.content_type === 'Color' ? (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-5 h-5 rounded-full flex-shrink-0 border border-[var(--type-color-border)]"
-              style={{ backgroundColor: item.preview }}
-            />
-            <span className="text-sm text-[var(--text-primary)] truncate">{item.preview}</span>
-          </div>
+          <span className="text-sm text-[var(--text-primary)] truncate block">{item.preview}</span>
         ) : item.content_type === 'Image' ? (
-          <div className="flex items-center gap-2">
-            {thumbnailCache.get(item.id) ? (
+          thumbnailCache.get(item.id) ? (
+            <div className="flex items-center gap-2">
               <img
                 src={thumbnailCache.get(item.id)}
                 alt="clip"
-                className="h-28 w-44 object-cover rounded"
+                className="h-16 max-w-[180px] object-cover rounded"
               />
-            ) : (
-              <div className="h-28 w-44 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
-                <span className="text-xs text-[var(--text-muted)]">图片</span>
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)]">图片</span>
+          )
         ) : item.content_type === 'Files' ? (
           <FilePreview preview={item.preview} />
+        ) : isLink ? (
+          <p className="text-sm text-[var(--text-primary)] truncate leading-snug">
+            {item.link_title || item.preview}
+          </p>
         ) : (
           <p className="text-sm text-[var(--text-primary)] truncate leading-snug">{item.preview}</p>
         )}
 
-        <div className="flex items-center gap-1.5 mt-1">
-          <span className="text-[10px] text-[var(--text-muted)]">{typeLabel}</span>
-          <span className="text-[10px] text-[var(--text-muted)]">·</span>
-          <span className="text-[10px] text-[var(--text-muted)]">{timeStr}</span>
-          {item.is_pinned && (
-            <span className="text-[10px] text-[var(--accent)]">· 已固定</span>
-          )}
-        </div>
+        {/* Metadata line */}
+        {metaParts.length > 0 && (
+          <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+            {metaParts.join(' · ')}
+          </p>
+        )}
       </div>
 
-      {/* Actions (show on hover/selected) */}
+      {/* Timestamp */}
+      <span className="text-[11px] text-[var(--text-muted)] flex-shrink-0 self-start mt-0.5">
+        {timeStr}
+      </span>
+
+      {/* Actions (show on hover) */}
       <div className={[
-        'flex items-center gap-1 flex-shrink-0 transition-opacity',
+        'flex items-center gap-0.5 flex-shrink-0 transition-opacity absolute right-2 top-1/2 -translate-y-1/2',
+        'bg-[var(--bg-elevated)] rounded px-1 py-0.5',
         isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
       ].join(' ')}>
         <button
           onClick={(e) => { e.stopPropagation(); handlePin(item.id) }}
-          className="px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded transition-colors"
+          className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded transition-colors"
           disabled={item.loading}
+          title={item.is_pinned ? '取消固定' : '固定'}
         >
-          {item.is_pinned ? '取消' : '固定'}
+          {item.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); handleDelete(item.id) }}
-          className="px-1.5 py-0.5 text-[10px] text-red-400 hover:text-red-300 rounded transition-colors"
+          className="p-1 text-[var(--text-muted)] hover:text-red-400 rounded transition-colors"
           disabled={item.loading}
+          title="删除"
         >
-          删除
+          <Trash2 size={12} />
         </button>
       </div>
     </div>

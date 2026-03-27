@@ -14,6 +14,7 @@ import { TypeFilterBarInline } from './TypeFilterBar'
 import { ClipList } from './vertical/ClipList'
 import { ClipBoard } from './horizontal/ClipBoard'
 import { hideWindow } from '../lib/tauri'
+import { Search, LayoutGrid, Settings, Check } from 'lucide-react'
 
 interface Props {}
 
@@ -79,7 +80,7 @@ export function ClipboardWindow({}: Props) {
       {shown && (
         <motion.div
           className={[
-            'flex flex-col bg-[var(--bg-primary)] overflow-hidden',
+            'flex flex-col overflow-hidden',
             isHorizontal ? 'w-screen h-[480px]' : 'w-full h-screen',
           ].join(' ')}
           initial={{ y: 40, opacity: 0 }}
@@ -88,29 +89,36 @@ export function ClipboardWindow({}: Props) {
           transition={{ type: 'spring', damping: 28, stiffness: 260 }}
         >
           <Command className="flex flex-col h-full" shouldFilter={false}>
-            {/* Search bar — horizontal: inline with type filter + settings */}
+            {/* Search bar */}
             <div className={[
-              'flex items-center gap-2 px-3 border-b border-[var(--border-subtle)]',
-              isHorizontal ? 'py-2' : 'py-2.5',
+              'flex items-center gap-2 px-3',
+              isHorizontal ? 'py-2 border-b border-[var(--border-subtle)]' : 'py-2',
             ].join(' ')}>
-              <span className="text-[var(--text-muted)] text-sm flex-shrink-0">⌕</span>
+              <Search size={14} className="text-[var(--text-muted)] flex-shrink-0" />
               <Command.Input
                 value={searchQuery}
                 onValueChange={setSearchQuery}
-                placeholder="搜索剪贴板..."
+                placeholder="Search clips..."
                 className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
               />
-              <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0">{totalCount} 条</span>
+              <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0">{totalCount}</span>
               {isHorizontal && <TypeFilterBarInline />}
               {isHorizontal && (
                 <button
                   onClick={() => invoke('open_settings_window')}
-                  className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0 ml-1"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0 ml-1"
                 >
-                  设置
+                  <Settings size={14} />
                 </button>
               )}
             </div>
+
+            {/* Search bar bottom accent line (vertical only) */}
+            {!isHorizontal && (
+              <div className="mx-3 h-px bg-[var(--border-subtle)]" style={{ boxShadow: '0 0 0 0' }}>
+                <div className="h-[1px] w-full bg-[var(--accent)] opacity-40" />
+              </div>
+            )}
 
             {/* Type filter — vertical only */}
             {!isHorizontal && <TypeFilterBar />}
@@ -126,19 +134,21 @@ export function ClipboardWindow({}: Props) {
             {/* Footer */}
             {!isHorizontal && (
               <div className="flex items-center justify-between px-3 py-1.5 border-t border-[var(--border-subtle)]">
-                <div className="flex gap-3">
-                  <span className="text-[10px] text-[var(--text-muted)]">↵ 粘贴</span>
-                  <span className="text-[10px] text-[var(--text-muted)]">P 固定</span>
-                  <span className="text-[10px] text-[var(--text-muted)]">⌫ 删除</span>
-                </div>
+                <button className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                  <LayoutGrid size={12} />
+                  Open Full View
+                </button>
                 <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                    <Check size={12} />
+                    Synced
+                  </span>
                   <button
                     onClick={() => invoke('open_settings_window')}
-                    className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                   >
-                    设置
+                    <Settings size={14} />
                   </button>
-                  <span className="text-[10px] text-[var(--text-muted)]">Esc 关闭</span>
                 </div>
               </div>
             )}
