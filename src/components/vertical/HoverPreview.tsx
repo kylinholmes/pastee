@@ -26,18 +26,21 @@ export function HoverPreview({ item, anchorY }: Props) {
     }
   }, [item.id, item.content_type])
 
-  // Position: fixed to right of the list, vertically centered on the item
+  // Position: fixed, vertically centered on the item, horizontally fits within window
   const isImage = item.content_type === 'Image'
-  const PANEL_WIDTH = isImage ? 480 : 280
-  const PANEL_MAX_HEIGHT = isImage ? 600 : 360
-  const RIGHT_OFFSET = 16
+  const MARGIN = 8
+  const viewportW = window.innerWidth
   const viewportH = window.innerHeight
 
-  // clamp so panel doesn't overflow viewport
+  const maxWidth = viewportW - MARGIN * 2
+  const PANEL_WIDTH = Math.min(isImage ? 480 : 280, maxWidth)
+  const PANEL_MAX_HEIGHT = Math.min(isImage ? 600 : 360, viewportH - MARGIN * 2)
+
   const top = Math.min(
-    Math.max(8, anchorY - PANEL_MAX_HEIGHT / 2),
-    viewportH - PANEL_MAX_HEIGHT - 8
+    Math.max(MARGIN, anchorY - PANEL_MAX_HEIGHT / 2),
+    viewportH - PANEL_MAX_HEIGHT - MARGIN
   )
+  const left = Math.max(MARGIN, viewportW - PANEL_WIDTH - MARGIN)
 
   const content = (() => {
     switch (item.content_type) {
@@ -106,7 +109,7 @@ export function HoverPreview({ item, anchorY }: Props) {
         width: PANEL_WIDTH,
         maxHeight: PANEL_MAX_HEIGHT,
         top,
-        right: RIGHT_OFFSET,
+        left,
       }}
     >
       {content}
