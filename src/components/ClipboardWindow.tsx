@@ -61,6 +61,15 @@ export function ClipboardWindow({}: Props) {
     return () => { unlisten.then(fn => fn()) }
   }, [])
 
+  // Rust 发来 window://hide 时，走动画关闭
+  useEffect(() => {
+    const unlisten = listen('window://hide', () => {
+      closeReason.current = 'hide'
+      setShown(false)
+    })
+    return () => { unlisten.then(fn => fn()) }
+  }, [])
+
   // Escape closes window via animation then hide
   // Cmd+, / Ctrl+, opens settings
   // ? focuses search input

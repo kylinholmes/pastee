@@ -1229,7 +1229,8 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
                     if let Some(state) = app_handle.try_state::<AppState>() {
                         if let Ok(keep_open) = state.keep_window_open.lock() {
                             if !*keep_open {
-                                let _ = window_clone.hide();
+                                // 发事件给前端，让前端走动画后再 hide
+                                let _ = window_clone.emit("window://hide", ());
                             }
                         }
                     }
