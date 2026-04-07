@@ -20,7 +20,7 @@ interface Settings {
 const DEFAULTS: Settings = {
   layoutOverride: 'auto',
   theme: 'dark',
-  activationHotkey: 'Ctrl+Shift+V',
+  activationHotkey: 'CommandOrControl+Shift+V',
   keepWindowOpen: false,
   historyRetentionDays: 30,
   maxItemCount: 500,
