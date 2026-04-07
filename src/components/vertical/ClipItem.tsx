@@ -1,11 +1,12 @@
 // src/components/vertical/ClipItem.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ClipItem as ClipItemType, useClipStore } from '../../store/clipStore'
 import { invoke } from '@tauri-apps/api/core'
 import {
   File, FileText, Code, ImageIcon, Palette, Link as LinkIcon,
   Pin, PinOff, Trash2,
 } from 'lucide-react'
+import { HoverPreview } from './HoverPreview'
 
 // Global icon cache: ext -> data:image/png;base64,...
 const iconCache = new Map<string, string>()
@@ -104,6 +105,20 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
   const iconType = isLink ? 'Link' : item.content_type
   const timeStr = relativeTime(item.created_at)
 
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [previewAnchorY, setPreviewAnchorY] = useState<number | null>(null)
+
+  function handleMouseEnter(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    hoverTimer.current = setTimeout(() => setPreviewAnchorY(midY), 300)
+  }
+
+  function handleMouseLeave() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    setPreviewAnchorY(null)
+  }
+
   // Source metadata
   const source = item.source ?? ''
   const metaParts: string[] = []
@@ -122,8 +137,11 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
   }
 
   return (
+    <>
     <div
       onClick={() => { onClick?.(); handlePaste() }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={[
         'group flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors relative',
         isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-hover)]',
@@ -213,5 +231,9 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
         </button>
       </div>
     </div>
+    {previewAnchorY !== null && (
+      <HoverPreview item={item} anchorY={previewAnchorY} />
+    )}
+    </>
   )
 }
