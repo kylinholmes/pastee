@@ -568,6 +568,39 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn update_hotkey(app: AppHandle, state: tauri::State<AppState>, hotkey: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Un-register all existing shortcuts first
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+
+    // Register new shortcut
+    app.global_shortcut()
+        .on_shortcut(hotkey.as_str(), move |ah, _shortcut, _event| {
+            if let Some(window) = ah.get_webview_window("main") {
+                resize_for_layout(&window);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        })
+        .map_err(|e| format!("快捷键注册失败: {}", e))?;
+
+    // Persist to settings.json
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    let path = storage.data_dir().join("settings.json");
+    let mut settings: serde_json::Value = match std::fs::read_to_string(&path) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or(serde_json::json!({})),
+        Err(_) => serde_json::json!({}),
+    };
+    settings["activationHotkey"] = serde_json::Value::String(hotkey.clone());
+    let s = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, s).map_err(|e| e.to_string())?;
+
+    println!("✅ 全局快捷键已更新: {}", hotkey);
+    Ok(())
+}
+
+#[tauri::command]
 fn set_keep_window_open(state: tauri::State<AppState>, keep: bool) -> Result<(), String> {
     let mut keep_open = state.keep_window_open.lock().map_err(|_| "Lock error")?;
     *keep_open = keep;
@@ -831,6 +864,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             get_settings,
             save_settings,
             apply_layout,
+            update_hotkey,
         ])
         .on_window_event(|_window, event| {
             match event {
@@ -1084,29 +1118,42 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// 注册全局快捷键
 fn setup_global_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    
-    #[cfg(target_os = "macos")]
-    let shortcut = "Cmd+Shift+V";
-    #[cfg(target_os = "windows")]
-    let shortcut = "Ctrl+Shift+V";
-    #[cfg(target_os = "linux")]
-    let shortcut = "Ctrl+Shift+V";
-    
-    if let Ok(()) = app.global_shortcut().on_shortcut(shortcut, move |app_handle, _shortcut, _event| {
+
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let settings_path = home.join("Documents").join("pastee").join("settings.json");
+
+    let hotkey: String = if let Ok(s) = std::fs::read_to_string(&settings_path) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+            v["activationHotkey"]
+                .as_str()
+                .map(|s| s.to_owned())
+                .unwrap_or_else(default_hotkey)
+        } else {
+            default_hotkey()
+        }
+    } else {
+        default_hotkey()
+    };
+
+    if let Ok(()) = app.global_shortcut().on_shortcut(hotkey.as_str(), move |app_handle, _shortcut, _event| {
         if let Some(window) = app_handle.get_webview_window("main") {
             resize_for_layout(&window);
             let _ = window.show();
             let _ = window.set_focus();
         }
     }) {
-        println!("✅ 全局快捷键已注册: {}", shortcut);
+        println!("✅ 全局快捷键已注册: {}", hotkey);
     } else {
-        println!("⚠️ 全局快捷键注册失败: {}", shortcut);
+        println!("⚠️ 全局快捷键注册失败: {}", hotkey);
         #[cfg(target_os = "macos")]
         println!("macOS提示: 需要在系统设置 → 隐私与安全 → 辅助功能 中授予权限");
     }
-    
+
     Ok(())
+}
+
+fn default_hotkey() -> String {
+    "CommandOrControl+Shift+V".to_owned()
 }
 
 /// 初始化存储和剪贴板监听
@@ -1158,6 +1205,10 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
         let app_handle = app.handle().clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Focused(false) = event {
+                // 如果设置窗口正在显示，不隐藏主窗口
+                if app_handle.get_webview_window("settings").is_some() {
+                    return;
+                }
                 // 检查是否设置了保持窗口打开
                 if let Some(state) = app_handle.try_state::<AppState>() {
                     if let Ok(keep_open) = state.keep_window_open.lock() {
