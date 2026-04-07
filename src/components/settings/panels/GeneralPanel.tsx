@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../../store/settingsStore'
 import { useClipStore } from '../../../store/clipStore'
+import { TYPE_ACCENT_COLORS, TYPE_DISPLAY_LABELS } from '../../../lib/typeColors'
 
 const RETENTION_OPTIONS = [
   { label: '1 周', value: 7 },
@@ -13,15 +14,6 @@ const RETENTION_OPTIONS = [
 
 const MAX_COUNT_STEPS = [100, 200, 500, 1000, 0] // 0 = 无限
 const MAX_COUNT_LABELS = ['100 条', '200 条', '500 条', '1000 条', '无限']
-
-const TYPE_LABELS: Record<string, string> = {
-  Text:   '文本',
-  Html:   'HTML',
-  Image:  '图片',
-  Color:  '颜色',
-  Files:  '文件',
-  Pinned: '已固定',
-}
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
@@ -40,16 +32,24 @@ function SectionTitle({ label }: { label: string }) {
 }
 
 export function GeneralPanel() {
-  const { layoutOverride, theme, historyRetentionDays, maxItemCount, keepWindowOpen, update } = useSettingsStore()
+  const { layoutOverride, theme, historyRetentionDays, maxItemCount, keepWindowOpen, vibrancy, update } = useSettingsStore()
   const { fetchAllClips, fetchTotalCount, totalCount } = useClipStore()
-  const [stats, setStats] = useState<{ label: string; count: number }[]>([])
+  const [stats, setStats] = useState<{ label: string; color: string; count: number }[]>([])
   const [clearing, setClearing] = useState(false)
+  const [storageSize, setStorageSize] = useState<{ db: number; images: number; total: number } | null>(null)
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
 
   useEffect(() => {
     fetchTotalCount()
     invoke<[string, number][]>('get_clip_stats').then(rows => {
-      setStats(rows.map(([type, count]) => ({ label: TYPE_LABELS[type] ?? type, count })))
+      setStats(rows.map(([type, count]) => ({ label: TYPE_DISPLAY_LABELS[type] ?? type, color: TYPE_ACCENT_COLORS[type] ?? '#94a3b8', count })))
     }).catch(() => {})
+    invoke<{ db: number; images: number; total: number }>('get_storage_size').then(setStorageSize).catch(() => {})
   }, [])
 
   const maxCountIndex = MAX_COUNT_STEPS.indexOf(maxItemCount) !== -1
@@ -63,8 +63,9 @@ export function GeneralPanel() {
       await fetchAllClips()
       await fetchTotalCount()
       invoke<[string, number][]>('get_clip_stats').then(rows => {
-        setStats(rows.map(([type, count]) => ({ label: TYPE_LABELS[type] ?? type, count })))
+        setStats(rows.map(([type, count]) => ({ label: TYPE_DISPLAY_LABELS[type] ?? type, color: TYPE_ACCENT_COLORS[type] ?? '#94a3b8', count })))
       }).catch(() => {})
+      invoke<{ db: number; images: number; total: number }>('get_storage_size').then(setStorageSize).catch(() => {})
     } finally {
       setClearing(false)
     }
@@ -102,6 +103,18 @@ export function GeneralPanel() {
       </SettingRow>
 
       <SectionTitle label="行为" />
+
+      <SettingRow label="透明效果" description="关闭后重启完全生效">
+        <button
+          onClick={() => update('vibrancy', !vibrancy)}
+          className={[
+            'w-8 h-4 rounded-full transition-colors flex items-center px-0.5',
+            vibrancy ? 'bg-[var(--accent)] justify-end' : 'bg-[var(--bg-elevated)] justify-start',
+          ].join(' ')}
+        >
+          <span className="w-3 h-3 rounded-full bg-white" />
+        </button>
+      </SettingRow>
 
       <SettingRow label="保持窗口开启" description="失去焦点后不自动关闭">
         <button
@@ -165,12 +178,20 @@ export function GeneralPanel() {
           <span className="text-[10px] text-[var(--text-muted)]">共 {totalCount} 条</span>
         </div>
         {stats.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {stats.map(({ label, count }) => (
-              <span key={label} className="px-2 py-0.5 rounded-full bg-[var(--bg-elevated)] text-[10px] text-[var(--text-secondary)]">
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {stats.map(({ label, color, count }) => (
+              <span key={label} className="px-2 py-0.5 rounded-full text-[10px]"
+                style={{ color, border: `1px solid ${color}55`, backgroundColor: `${color}15` }}>
                 {label} {count}
               </span>
             ))}
+          </div>
+        )}
+        {storageSize && (
+          <div className="flex gap-3 mb-3 text-[10px] text-[var(--text-muted)]">
+            <span>数据库 {formatBytes(storageSize.db)}</span>
+            <span>图片 {formatBytes(storageSize.images)}</span>
+            <span className="text-[var(--text-secondary)]">共 {formatBytes(storageSize.total)}</span>
           </div>
         )}
         <button

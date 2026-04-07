@@ -12,6 +12,7 @@ interface Settings {
   keepWindowOpen: boolean
   historyRetentionDays: number
   maxItemCount: number
+  vibrancy: boolean
   ocrEnabled: boolean
   ocrModelUrl: string
   ocrApiKey: string
@@ -24,6 +25,7 @@ const DEFAULTS: Settings = {
   keepWindowOpen: false,
   historyRetentionDays: 30,
   maxItemCount: 500,
+  vibrancy: true,
   ocrEnabled: false,
   ocrModelUrl: '',
   ocrApiKey: '',

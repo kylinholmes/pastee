@@ -21,7 +21,7 @@ interface Props {}
 export function ClipboardWindow({}: Props) {
   const { fetchAllClips, fetchTotalCount, initListener, setSearchQuery, searchQuery, totalCount } = useClipStore()
   const { onItemAdded } = useQueueStore()
-  const { layoutOverride, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
+  const { layoutOverride, loaded: settingsLoaded, load: loadSettings, vibrancy } = useSettingsStore()
   const [layout, setLayout] = useState<Layout>('vertical')
   const isHorizontal = layout === 'horizontal'
   const searchRef = useRef<HTMLInputElement>(null)
@@ -130,14 +130,22 @@ export function ClipboardWindow({}: Props) {
         <motion.div
           className={[
             'flex flex-col overflow-hidden',
-            isHorizontal ? 'w-screen h-[480px]' : 'w-full h-screen',
+            isHorizontal ? 'w-screen h-[280px]' : 'w-full h-screen',
           ].join(' ')}
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 40, opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } }}
           transition={{ type: 'spring', damping: 28, stiffness: 260 }}
         >
-          <Command className="flex flex-col h-full" shouldFilter={false}>
+          <Command
+            className="flex flex-col h-full rounded-xl overflow-hidden"
+            style={{
+              margin: '6px',
+              height: 'calc(100% - 12px)',
+              backgroundColor: vibrancy ? undefined : 'var(--bg-primary)',
+            }}
+            shouldFilter={false}
+          >
             {/* Search bar */}
             <div className={[
               'flex items-center gap-2 px-3',

@@ -547,44 +547,34 @@ impl Storage {
     /// - HSLA: hsla(h, s%, l%, a)
     fn is_color(text: &str) -> bool {
         let text = text.trim();
-        
-        // HEX 格式: #RGB, #RRGGBB, #RRGGBBAA
+
+        // HEX: #RGB, #RRGGBB, #RRGGBBAA
         if text.starts_with('#') {
             let hex_part = &text[1..];
             let len = hex_part.len();
-            // 验证长度和字符
-            if (len == 3 || len == 6 || len == 8) && hex_part.chars().all(|c| c.is_ascii_hexdigit()) {
+            if (len == 3 || len == 6 || len == 8)
+                && hex_part.chars().all(|c| c.is_ascii_hexdigit())
+            {
                 return true;
             }
         }
-        
-        // RGB/RGBA 格式
+
         let lower = text.to_lowercase();
-        if lower.starts_with("rgb(") || lower.starts_with("rgba(") {
-            if let (Some(start), Some(end)) = (lower.find('('), lower.rfind(')')) {
-                let content = &lower[start+1..end];
-                let parts: Vec<&str> = content.split(',').map(|s| s.trim()).collect();
-                // rgb 需要 3 个参数，rgba 需要 4 个参数
-                if (lower.starts_with("rgb(") && parts.len() == 3) || 
-                   (lower.starts_with("rgba(") && parts.len() == 4) {
+
+        // 通用函数式颜色格式检测: name(...) 或 name(... / ...)
+        let functional_prefixes = [
+            "rgb(", "rgba(", "hsl(", "hsla(",
+            "hwb(", "lab(", "lch(", "oklab(", "oklch(",
+            "color(",
+        ];
+        for prefix in &functional_prefixes {
+            if lower.starts_with(prefix) {
+                if lower.contains('(') && lower.contains(')') {
                     return true;
                 }
             }
         }
-        
-        // HSL/HSLA 格式
-        if lower.starts_with("hsl(") || lower.starts_with("hsla(") {
-            if let (Some(start), Some(end)) = (lower.find('('), lower.rfind(')')) {
-                let content = &lower[start+1..end];
-                let parts: Vec<&str> = content.split(',').map(|s| s.trim()).collect();
-                // hsl 需要 3 个参数，hsla 需要 4 个参数
-                if (lower.starts_with("hsl(") && parts.len() == 3) || 
-                   (lower.starts_with("hsla(") && parts.len() == 4) {
-                    return true;
-                }
-            }
-        }
-        
+
         false
     }
 

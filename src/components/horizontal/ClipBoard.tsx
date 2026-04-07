@@ -38,7 +38,7 @@ export function ClipBoard() {
 
   return (
     <div className="flex-1 overflow-x-auto">
-      <div className="flex items-stretch gap-2 px-3 py-3 h-full">
+      <div className="flex items-start gap-2 px-3 py-3 h-full">
         {visibleGroups.map(group => (
           <QueueGroupCard key={group.id} group={group} />
         ))}

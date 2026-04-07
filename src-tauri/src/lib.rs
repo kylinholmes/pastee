@@ -103,13 +103,12 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
             let size = m.size();
             let scale = m.scale_factor();
             let w = size.width;
-            let h = 680;
+            let h = (280.0 * scale) as u32;
             let x = pos.x;
             let y = pos.y + size.height as i32 - h as i32;
 
             let _ = window.set_size(tauri::PhysicalSize::new(w, h));
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-            let _ = window.set_always_on_top(true);
             #[cfg(target_os = "macos")]
             set_window_above_dock(window);
         }
@@ -368,6 +367,39 @@ fn get_clip_stats(state: tauri::State<AppState>) -> Result<Vec<(String, i64)>, S
 }
 
 #[tauri::command]
+fn get_storage_size(state: tauri::State<AppState>) -> Result<serde_json::Value, String> {
+    let data_dir = {
+        let storage = state.storage.lock().map_err(|_| "Lock error")?;
+        storage.data_dir().to_path_buf()
+    };
+    let db_size = std::fs::metadata(data_dir.join("clippy.db"))
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let images_size = dir_size(&data_dir.join("images"));
+    Ok(serde_json::json!({
+        "db": db_size,
+        "images": images_size,
+        "total": db_size + images_size,
+    }))
+}
+
+fn dir_size(path: &std::path::Path) -> u64 {
+    if !path.exists() { return 0 }
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total += dir_size(&p);
+            } else {
+                total += std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    total
+}
+
+#[tauri::command]
 fn clear_unpinned_clips(state: tauri::State<AppState>) -> Result<i64, String> {
     let mut storage = state.storage.lock().map_err(|_| "Lock error")?;
     storage.clear_unpinned().map_err(|e| e.to_string())
@@ -553,8 +585,6 @@ fn paste_clip(
 #[tauri::command]
 fn open_settings_window(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("settings") {
-        #[cfg(target_os = "macos")]
-        set_window_above_dock(&w);
         w.show().map_err(|e| e.to_string())?;
         w.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
@@ -568,10 +598,6 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
         .always_on_top(false)
         .build()
         .map_err(|e| e.to_string())?;
-
-    // macOS: 设置窗口需要与主窗口在同一 level，否则失去应用焦点后会被遮挡
-    #[cfg(target_os = "macos")]
-    set_window_above_dock(&w);
 
     Ok(())
 }
@@ -875,6 +901,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             get_recent_clips,
             get_total_count,
             get_clip_stats,
+            get_storage_size,
             clear_unpinned_clips,
             search_clips,
             get_clip_content,
@@ -1217,18 +1244,26 @@ fn setup_storage_and_clipboard(
 fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 窗口失去焦点时自动隐藏（除非设置了保持打开）
     if let Some(window) = app.get_webview_window("main") {
-        // Apply vibrancy effect
-        #[cfg(target_os = "windows")]
-        {
-            use window_vibrancy::apply_acrylic;
-            let _ = apply_acrylic(&window, Some((31, 31, 31, 190)));
+        // Apply vibrancy effect (if enabled in settings)
+        let vibrancy_enabled = read_settings_value("vibrancy")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        if vibrancy_enabled {
+            #[cfg(target_os = "windows")]
+            {
+                use window_vibrancy::apply_acrylic;
+                let _ = apply_acrylic(&window, Some((31, 31, 31, 190)));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
+            }
         }
+
         #[cfg(target_os = "macos")]
-        {
-            use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
-            set_window_above_dock(&window);
-        }
+        set_window_above_dock(&window);
 
         let window_clone = window.clone();
         let app_handle = app.handle().clone();
@@ -1237,19 +1272,19 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
                 let app_handle = app_handle.clone();
                 let window_clone = window_clone.clone();
                 std::thread::spawn(move || {
-                    // 稍等让设置窗口完成显示，再检查可见性
+                    // 稍等让焦点完成转移
                     std::thread::sleep(std::time::Duration::from_millis(100));
-                    let settings_visible = app_handle
+                    // 如果焦点在本应用任意窗口内（如设置窗口），不关闭
+                    let settings_focused = app_handle
                         .get_webview_window("settings")
-                        .and_then(|w| w.is_visible().ok())
+                        .and_then(|w| w.is_focused().ok())
                         .unwrap_or(false);
-                    if settings_visible {
+                    if settings_focused {
                         return;
                     }
                     if let Some(state) = app_handle.try_state::<AppState>() {
                         if let Ok(keep_open) = state.keep_window_open.lock() {
                             if !*keep_open {
-                                // 发事件给前端，让前端走动画后再 hide
                                 let _ = window_clone.emit("window://hide", ());
                             }
                         }

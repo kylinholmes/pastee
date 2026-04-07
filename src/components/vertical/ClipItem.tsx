@@ -6,6 +6,7 @@ import {
   File, FileText, Code, ImageIcon, Palette, Link as LinkIcon,
   Pin, PinOff, Trash2,
 } from 'lucide-react'
+import { TYPE_ACCENT_COLORS } from '../../lib/typeColors'
 import { HoverPreview } from './HoverPreview'
 
 // Global icon cache: ext -> data:image/png;base64,...
@@ -81,8 +82,8 @@ function relativeTime(microsTs: number): string {
 }
 
 /** Type-specific line icon */
-function TypeIcon({ type, className }: { type: string; className?: string }) {
-  const props = { size: 16, className: className ?? 'text-[var(--text-muted)]' }
+function TypeIcon({ type, className, color }: { type: string; className?: string; color?: string }) {
+  const props = { size: 16, className: className, style: { color: color } }
   switch (type) {
     case 'Text': return <FileText {...props} />
     case 'Html': return <Code {...props} />
@@ -93,15 +94,7 @@ function TypeIcon({ type, className }: { type: string; className?: string }) {
   }
 }
 
-const TAG_COLORS: Record<string, string> = {
-  Text:  '#94a3b8',
-  Html:  '#6366f1',
-  Image: '#f59e0b',
-  Color: '#ec4899',
-  Files: '#64748b',
-  Link:  '#3b82f6',
-  Pinned: '#f97316',
-}
+const TAG_COLORS = TYPE_ACCENT_COLORS
 
 function accentColor(item: ClipItemType): string {
   if (item.is_pinned) return TAG_COLORS.Pinned
@@ -168,7 +161,10 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
       <div className="absolute left-0.5 top-3 bottom-3 w-[3px]" style={{ backgroundColor: accentColor(item) }} />
 
       {/* Type icon */}
-      <div className="flex-shrink-0 w-8 h-8 rounded flex items-center justify-center bg-[var(--bg-secondary)]">
+      <div
+        className="flex-shrink-0 w-8 h-8 rounded flex items-center justify-center"
+        style={{ backgroundColor: accentColor(item) + '22' }}
+      >
         {item.content_type === 'Color' ? (
           <div
             className="w-5 h-5 rounded-full border border-[var(--type-color-border)]"
@@ -177,7 +173,7 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
         ) : isLink && item.link_favicon ? (
           <img src={item.link_favicon} alt="" className="w-4 h-4 rounded-sm" />
         ) : (
-          <TypeIcon type={iconType} />
+          <TypeIcon type={iconType} color={accentColor(item)} />
         )}
       </div>
 

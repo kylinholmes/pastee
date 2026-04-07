@@ -101,27 +101,27 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
         isSelected ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] ring-opacity-40' : 'hover:border-opacity-60',
       ].join(' ')}
     >
-      <span className={`text-[9px] font-semibold mb-1.5 ${labelColor}`}>
+      <span className={`text-[11px] font-semibold mb-2 ${labelColor}`}>
         {isLink ? 'Link' : (TYPE_LABELS[item.content_type] ?? item.content_type)}
       </span>
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {item.loading ? (
-          <p className="text-[10px] text-[var(--text-muted)] animate-pulse">处理中...</p>
+          <p className="text-xs text-[var(--text-muted)] animate-pulse">处理中...</p>
         ) : item.content_type === 'Color' ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <div
-              className="w-6 h-6 rounded-full border border-[var(--type-color-border)]"
+              className="w-8 h-8 rounded-full border border-[var(--type-color-border)]"
               style={{ backgroundColor: item.preview }}
             />
-            <span className="text-[10px] text-[var(--text-secondary)] truncate">{item.preview}</span>
+            <span className="text-xs text-[var(--text-secondary)] truncate">{item.preview}</span>
           </div>
         ) : isImage ? (
           thumbnailCache.get(item.id) ? (
-            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-36 object-cover rounded" />
+            <img src={thumbnailCache.get(item.id)} alt="clip" className="w-full h-full object-cover rounded" />
           ) : (
-            <div className="w-full h-36 bg-[var(--bg-elevated)] rounded flex items-center justify-center">
-              <span className="text-xs text-[var(--text-muted)]">🖼</span>
+            <div className="w-full h-full bg-[var(--bg-elevated)] rounded flex items-center justify-center">
+              <span className="text-base text-[var(--text-muted)]">🖼</span>
             </div>
           )
         ) : isFiles ? (() => {
@@ -132,8 +132,8 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
           const extra = names.length - MAX_STACK
           const total = shown.length
           return (
-            <div className="flex flex-col items-center justify-center flex-1 gap-1.5">
-              <div className="relative" style={{ width: 40 + (total - 1) * 6, height: 40 + (total - 1) * 4 }}>
+            <div className="flex flex-col items-center justify-center flex-1 gap-2">
+              <div className="relative" style={{ width: 48 + (total - 1) * 6, height: 48 + (total - 1) * 4 }}>
                 {shown.slice().reverse().map((name, ri) => {
                   const i = total - 1 - ri
                   return (
@@ -147,17 +147,17 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
                         opacity: 1 - (total - 1 - i) * 0.25,
                       }}
                     >
-                      <FileIcon filename={name} size={40} />
+                      <FileIcon filename={name} size={48} />
                     </div>
                   )
                 })}
               </div>
               <div className="flex flex-col items-center gap-0.5 w-full">
-                <span className="text-[8px] text-[var(--text-secondary)] text-center leading-tight px-1 truncate w-full">
+                <span className="text-[10px] text-[var(--text-secondary)] text-center leading-tight px-1 truncate w-full">
                   {names.length === 1 ? names[0] : `${names.length} 个文件`}
                 </span>
                 {names.length > 1 && (
-                  <span className="text-[7px] text-[var(--text-muted)] text-center truncate w-full px-1">
+                  <span className="text-[9px] text-[var(--text-muted)] text-center truncate w-full px-1">
                     {shown.map(n => n.split('/').pop()).join(', ')}
                     {extra > 0 && ` +${extra}`}
                   </span>
@@ -168,20 +168,20 @@ export function ClipCard({ item, isSelected, onClick }: Props) {
         })() : isLink ? (
           <LinkCardContent item={item} />
         ) : (
-          <p className="text-[10px] text-[var(--text-primary)] line-clamp-6 leading-relaxed">{item.preview}</p>
+          <p className="text-xs text-[var(--text-primary)] line-clamp-[8] leading-relaxed">{item.preview}</p>
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-[var(--border-subtle)]">
-        <span className="text-[8px] text-[var(--text-muted)]">{timeStr}</span>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--border-subtle)]">
+        <span className="text-[10px] text-[var(--text-muted)]">{timeStr}</span>
+        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={e => { e.stopPropagation(); handlePin(item.id) }}
-            className="text-[8px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >{item.is_pinned ? '取消' : '固定'}</button>
           <button
             onClick={e => { e.stopPropagation(); handleDelete(item.id) }}
-            className="text-[8px] text-red-400 hover:text-red-300"
+            className="text-[10px] text-red-400 hover:text-red-300"
           >✕</button>
         </div>
       </div>
@@ -212,9 +212,9 @@ function LinkCardContent({ item }: { item: ClipItem }) {
       )}
       <div className="flex-shrink-0">
         {link_title && (
-          <p className="text-[9px] text-[var(--text-primary)] font-medium leading-tight line-clamp-2">{link_title}</p>
+          <p className="text-[10px] text-[var(--text-primary)] font-medium leading-tight line-clamp-2">{link_title}</p>
         )}
-        <p className="text-[8px] text-[#3b82f6] truncate">{domain}</p>
+        <p className="text-[10px] text-[#3b82f6] truncate">{domain}</p>
       </div>
     </div>
   )
