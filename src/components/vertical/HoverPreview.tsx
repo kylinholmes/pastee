@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { getImageUrl } from '../../lib/tauri'
 import { ClipItem } from '../../store/clipStore'
 
 interface Props {
@@ -16,8 +16,8 @@ export function HoverPreview({ item, anchorY }: Props) {
 
   useEffect(() => {
     if (item.content_type === 'Image') {
-      invoke<string>('get_image_url', { id: item.id, thumbnail: false })
-        .then(path => setImageUrl(convertFileSrc(path)))
+      getImageUrl(item.id, false)
+        .then(url => setImageUrl(url))
         .catch(() => {})
     } else if (item.content_type === 'Text' || item.content_type === 'Html') {
       invoke<{ type: string; data?: string; text?: string }>('get_clip_content', { id: item.id })
