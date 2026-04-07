@@ -586,8 +586,10 @@ fn update_hotkey(app: AppHandle, state: tauri::State<AppState>, hotkey: String) 
         .map_err(|e| format!("快捷键注册失败: {}", e))?;
 
     // Persist to settings.json
-    let storage = state.storage.lock().map_err(|_| "Lock error")?;
-    let path = storage.data_dir().join("settings.json");
+    let path = {
+        let storage = state.storage.lock().map_err(|_| "Lock error")?;
+        storage.data_dir().join("settings.json")
+    };
     let mut settings: serde_json::Value = match std::fs::read_to_string(&path) {
         Ok(s) => serde_json::from_str(&s).unwrap_or(serde_json::json!({})),
         Err(_) => serde_json::json!({}),
