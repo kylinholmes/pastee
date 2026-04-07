@@ -141,12 +141,6 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
             className="w-5 h-5 rounded-full border border-[var(--type-color-border)]"
             style={{ backgroundColor: item.preview }}
           />
-        ) : item.content_type === 'Image' && thumbnailCache.get(item.id) ? (
-          <img
-            src={thumbnailCache.get(item.id)}
-            alt="clip"
-            className="w-8 h-8 object-cover rounded"
-          />
         ) : isLink && item.link_favicon ? (
           <img src={item.link_favicon} alt="" className="w-4 h-4 rounded-sm" />
         ) : (
