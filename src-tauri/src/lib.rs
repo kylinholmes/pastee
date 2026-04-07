@@ -551,11 +551,13 @@ fn paste_clip(
 #[tauri::command]
 fn open_settings_window(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("settings") {
+        #[cfg(target_os = "macos")]
+        set_window_above_dock(&w);
         w.show().map_err(|e| e.to_string())?;
         w.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("#/settings".into()))
+    let w = tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("#/settings".into()))
         .title("pastee 设置")
         .inner_size(720.0, 560.0)
         .resizable(false)
@@ -564,6 +566,11 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
         .always_on_top(false)
         .build()
         .map_err(|e| e.to_string())?;
+
+    // macOS: 设置窗口需要与主窗口在同一 level，否则失去应用焦点后会被遮挡
+    #[cfg(target_os = "macos")]
+    set_window_above_dock(&w);
+
     Ok(())
 }
 
