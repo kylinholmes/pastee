@@ -77,14 +77,14 @@ export function ClipboardWindow({}: Props) {
         return
       }
       const active = document.activeElement
-      const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
-      if (e.key === '?' && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const isInSearch = active === searchRef.current
+      if (e.key === '?' && !isInSearch && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         searchRef.current?.focus()
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
   }, [])
 
   const isHorizontal = layout === 'horizontal'
