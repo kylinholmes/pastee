@@ -55,13 +55,13 @@ export function ShortcutsPanel() {
             invoke('set_keep_window_open', { keep: next }).catch(() => {})
           }}
           className={[
-            'w-8 h-4 rounded-full transition-colors relative',
+            'w-8 h-4 rounded-full transition-colors relative overflow-hidden',
             keepWindowOpen ? 'bg-[var(--accent)]' : 'bg-[var(--bg-elevated)]',
           ].join(' ')}
         >
           <span className={[
             'absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform',
-            keepWindowOpen ? 'translate-x-4' : 'translate-x-0.5',
+            keepWindowOpen ? 'translate-x-[18px]' : 'translate-x-0.5',
           ].join(' ')} />
         </button>
       </div>
