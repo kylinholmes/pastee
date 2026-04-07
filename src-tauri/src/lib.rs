@@ -1207,8 +1207,12 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
         let app_handle = app.handle().clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                // 如果设置窗口正在显示，不隐藏主窗口
-                if app_handle.get_webview_window("settings").is_some() {
+                // 如果设置窗口正在显示（可见），不隐藏主窗口
+                let settings_visible = app_handle
+                    .get_webview_window("settings")
+                    .and_then(|w| w.is_visible().ok())
+                    .unwrap_or(false);
+                if settings_visible {
                     return;
                 }
                 // 检查是否设置了保持窗口打开
