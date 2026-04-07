@@ -1207,22 +1207,26 @@ fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
         let app_handle = app.handle().clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                // 如果设置窗口正在显示（可见），不隐藏主窗口
-                let settings_visible = app_handle
-                    .get_webview_window("settings")
-                    .and_then(|w| w.is_visible().ok())
-                    .unwrap_or(false);
-                if settings_visible {
-                    return;
-                }
-                // 检查是否设置了保持窗口打开
-                if let Some(state) = app_handle.try_state::<AppState>() {
-                    if let Ok(keep_open) = state.keep_window_open.lock() {
-                        if !*keep_open {
-                            let _ = window_clone.hide();
+                let app_handle = app_handle.clone();
+                let window_clone = window_clone.clone();
+                std::thread::spawn(move || {
+                    // 稍等让设置窗口完成显示，再检查可见性
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let settings_visible = app_handle
+                        .get_webview_window("settings")
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(false);
+                    if settings_visible {
+                        return;
+                    }
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        if let Ok(keep_open) = state.keep_window_open.lock() {
+                            if !*keep_open {
+                                let _ = window_clone.hide();
+                            }
                         }
                     }
-                }
+                });
             }
         });
         
