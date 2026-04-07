@@ -49,6 +49,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         ])
       ) as unknown) as Settings
       set({ ...merged, loaded: true })
+      invoke('set_keep_window_open', { keep: merged.keepWindowOpen }).catch(() => {})
     } catch (e) {
       console.warn('Settings load failed, using defaults:', e)
       set({ loaded: true })

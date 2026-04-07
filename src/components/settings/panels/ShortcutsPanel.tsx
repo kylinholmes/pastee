@@ -1,6 +1,7 @@
 // src/components/settings/panels/ShortcutsPanel.tsx
 import { useEffect, useState } from 'react'
 import { platform } from '@tauri-apps/plugin-os'
+import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../../store/settingsStore'
 import { tauriHotkeyToBadges } from '../../../lib/hotkey'
 import { HotkeyRecorder } from '../HotkeyRecorder'
@@ -48,7 +49,11 @@ export function ShortcutsPanel() {
       <div className="flex items-center justify-between py-2">
         <p className="text-xs text-[var(--text-primary)]">保持窗口开启</p>
         <button
-          onClick={() => update('keepWindowOpen', !keepWindowOpen)}
+          onClick={() => {
+            const next = !keepWindowOpen
+            update('keepWindowOpen', next)
+            invoke('set_keep_window_open', { keep: next }).catch(() => {})
+          }}
           className={[
             'w-8 h-4 rounded-full transition-colors relative',
             keepWindowOpen ? 'bg-[var(--accent)]' : 'bg-[var(--bg-elevated)]',
