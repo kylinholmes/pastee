@@ -20,7 +20,7 @@ export function HotkeyRecorder({ onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    platform().then(p => setIsMac(p === 'macos'))
+    setIsMac(platform() === 'macos')
   }, [])
 
   useEffect(() => {

@@ -12,7 +12,7 @@ export function ShortcutsPanel() {
   const [recording, setRecording] = useState(false)
 
   useEffect(() => {
-    platform().then(p => setIsMac(p === 'macos'))
+    setIsMac(platform() === 'macos')
   }, [])
 
   const badges = tauriHotkeyToBadges(activationHotkey, isMac)
