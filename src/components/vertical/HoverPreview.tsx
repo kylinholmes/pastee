@@ -27,8 +27,9 @@ export function HoverPreview({ item, anchorY }: Props) {
   }, [item.id, item.content_type])
 
   // Position: fixed to right of the list, vertically centered on the item
-  const PANEL_WIDTH = 280
-  const PANEL_MAX_HEIGHT = 360
+  const isImage = item.content_type === 'Image'
+  const PANEL_WIDTH = isImage ? 480 : 280
+  const PANEL_MAX_HEIGHT = isImage ? 600 : 360
   const RIGHT_OFFSET = 16
   const viewportH = window.innerHeight
 
@@ -42,7 +43,7 @@ export function HoverPreview({ item, anchorY }: Props) {
     switch (item.content_type) {
       case 'Image':
         return imageUrl ? (
-          <img src={imageUrl} alt="preview" className="w-full h-auto rounded object-contain max-h-[320px]" />
+          <img src={imageUrl} alt="preview" className="w-full h-auto rounded object-contain max-h-[560px]" />
         ) : (
           <div className="flex items-center justify-center h-24 text-xs text-[var(--text-muted)]">加载中…</div>
         )
