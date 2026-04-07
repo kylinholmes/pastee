@@ -1,4 +1,3 @@
-// src/components/ClipboardWindow.tsx
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -23,6 +22,7 @@ export function ClipboardWindow({}: Props) {
   const { onItemAdded } = useQueueStore()
   const { layoutOverride, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
   const [layout, setLayout] = useState<Layout>('vertical')
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Resolve layout: user override takes precedence over OS detection
   useEffect(() => {
@@ -62,11 +62,25 @@ export function ClipboardWindow({}: Props) {
   }, [])
 
   // Escape closes window via animation then hide
+  // Cmd+, / Ctrl+, opens settings
+  // ? focuses search input
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closeReason.current = 'hide'
         setShown(false)
+        return
+      }
+      if (e.key === ',' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        invoke('open_settings_window')
+        return
+      }
+      const active = document.activeElement
+      const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+      if (e.key === '?' && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        searchRef.current?.focus()
       }
     }
     window.addEventListener('keydown', handler)
@@ -96,6 +110,7 @@ export function ClipboardWindow({}: Props) {
             ].join(' ')}>
               <Search size={14} className="text-[var(--text-muted)] flex-shrink-0" />
               <Command.Input
+                ref={searchRef}
                 value={searchQuery}
                 onValueChange={setSearchQuery}
                 placeholder="Search clips..."
