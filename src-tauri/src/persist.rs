@@ -186,7 +186,7 @@ impl Storage {
              image_format, width, height, app_context,
              link_title, link_domain, link_og_image, link_favicon
              FROM records
-             ORDER BY is_pinned DESC, created_at DESC
+             ORDER BY created_at DESC
              LIMIT ?1 OFFSET ?2"
         )?;
 
@@ -285,6 +285,28 @@ impl Storage {
         )?;
         println!("📊 数据库总记录数: {}", count);
         Ok(count)
+    }
+
+    /// 按类型统计记录数
+    pub fn get_stats(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT type, COUNT(*) FROM records GROUP BY type ORDER BY COUNT(*) DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        let mut result = vec![];
+        // pinned count
+        let pinned: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM records WHERE is_pinned = 1", [], |r| r.get(0)
+        )?;
+        if pinned > 0 {
+            result.push(("Pinned".to_string(), pinned));
+        }
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
     }
 
     /// 搜索 (所有类型都通过 content_text 搜索)

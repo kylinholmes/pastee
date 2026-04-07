@@ -93,6 +93,23 @@ function TypeIcon({ type, className }: { type: string; className?: string }) {
   }
 }
 
+const TAG_COLORS: Record<string, string> = {
+  Text:  '#94a3b8',
+  Html:  '#6366f1',
+  Image: '#f59e0b',
+  Color: '#ec4899',
+  Files: '#64748b',
+  Link:  '#3b82f6',
+  Pinned: '#f97316',
+}
+
+function accentColor(item: ClipItemType): string {
+  if (item.is_pinned) return TAG_COLORS.Pinned
+  if (item.tags?.includes('link')) return TAG_COLORS.Link
+  return TAG_COLORS[item.content_type] ?? '#94a3b8'
+}
+
+
 interface Props {
   item: ClipItemType
   isSelected?: boolean
@@ -111,7 +128,7 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
   function handleMouseEnter(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const midY = rect.top + rect.height / 2
-    hoverTimer.current = setTimeout(() => setPreviewAnchorY(midY), 300)
+    hoverTimer.current = setTimeout(() => setPreviewAnchorY(midY), 1000)
   }
 
   function handleMouseLeave() {
@@ -147,10 +164,8 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
         isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-hover)]',
       ].join(' ')}
     >
-      {/* Pinned accent bar */}
-      {item.is_pinned && (
-        <div className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-[var(--accent)]" />
-      )}
+      {/* Type accent bar */}
+      <div className="absolute left-0.5 top-3 bottom-3 w-[3px]" style={{ backgroundColor: accentColor(item) }} />
 
       {/* Type icon */}
       <div className="flex-shrink-0 w-8 h-8 rounded flex items-center justify-center bg-[var(--bg-secondary)]">
@@ -195,8 +210,9 @@ export function ClipItem({ item, isSelected, onClick }: Props) {
         )}
 
         {/* Metadata line */}
-        {metaParts.length > 0 && (
-          <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+        {(metaParts.length > 0 || item.is_pinned) && (
+          <p className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+            {item.is_pinned && <Pin size={9} className="flex-shrink-0 text-[var(--accent)]" />}
             {metaParts.join(' · ')}
           </p>
         )}

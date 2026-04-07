@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { motion, AnimatePresence } from 'motion/react'
 import { Command } from 'cmdk'
 import { useClipStore } from '../store/clipStore'
@@ -22,6 +23,7 @@ export function ClipboardWindow({}: Props) {
   const { onItemAdded } = useQueueStore()
   const { layoutOverride, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
   const [layout, setLayout] = useState<Layout>('vertical')
+  const isHorizontal = layout === 'horizontal'
   const searchRef = useRef<HTMLInputElement>(null)
 
   // Resolve layout: user override takes precedence over OS detection
@@ -52,6 +54,27 @@ export function ClipboardWindow({}: Props) {
 
   const [shown, setShown] = useState(false)
   const closeReason = useRef<'hide'>('hide')
+
+  // Save window size on resize (vertical layout only, debounced)
+  useEffect(() => {
+    if (isHorizontal) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const appWindow = getCurrentWindow()
+    const unlisten = appWindow.onResized(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(async () => {
+        const size = await appWindow.innerSize()
+        const factor = await appWindow.scaleFactor()
+        const logicalW = Math.round(size.width / factor)
+        const logicalH = Math.round(size.height / factor)
+        invoke('save_window_size', { width: logicalW, height: logicalH })
+      }, 500)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unlisten.then(fn => fn())
+    }
+  }, [isHorizontal])
 
   useEffect(() => {
     const appWindow = getCurrentWebviewWindow()
@@ -87,16 +110,19 @@ export function ClipboardWindow({}: Props) {
       }
       const active = document.activeElement
       const isInSearch = active === searchRef.current
-      if (e.key === '?' && !isInSearch && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault()
-        searchRef.current?.focus()
+      if (!isInSearch && !e.altKey) {
+        if (e.key === '?' || e.key === '？') {
+          e.preventDefault()
+          searchRef.current?.focus()
+        } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault()
+          searchRef.current?.focus()
+        }
       }
     }
     window.addEventListener('keydown', handler, { capture: true })
     return () => window.removeEventListener('keydown', handler, { capture: true })
   }, [])
-
-  const isHorizontal = layout === 'horizontal'
 
   return (
     <AnimatePresence onExitComplete={hideWindow}>

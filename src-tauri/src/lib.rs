@@ -60,26 +60,17 @@ fn get_cursor_position() -> Option<(i32, i32)> {
 }
 
 fn read_layout_setting() -> String {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return "auto".to_string(),
-    };
-    let settings_path = home.join("Documents").join("pastee").join("settings.json");
+    read_settings_value("layoutOverride")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "auto".to_string())
+}
 
-    let contents = match std::fs::read_to_string(&settings_path) {
-        Ok(s) => s,
-        Err(_) => return "auto".to_string(),
-    };
-
-    let json: serde_json::Value = match serde_json::from_str(&contents) {
-        Ok(v) => v,
-        Err(_) => return "auto".to_string(),
-    };
-
-    json.get("layoutOverride")
-        .and_then(|v| v.as_str())
-        .unwrap_or("auto")
-        .to_string()
+fn read_settings_value(key: &str) -> Option<serde_json::Value> {
+    let home = dirs::home_dir()?;
+    let path = home.join("Documents").join("pastee").join("settings.json");
+    let contents = std::fs::read_to_string(&path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&contents).ok()?;
+    json.get(key).cloned()
 }
 
 fn resize_for_layout(window: &tauri::WebviewWindow) {
@@ -138,14 +129,19 @@ fn resize_for_layout(window: &tauri::WebviewWindow) {
 
         let logical_h: u32 = if let Some(ref m) = monitor {
             let scale = m.scale_factor();
-            // Available height in logical pixels, leave ~80px for Dock + margin
             let available = (m.size().height as f64 / scale) as u32;
             (available.saturating_sub(80)).min(750)
         } else {
             750
         };
 
-        let _ = window.set_size(tauri::LogicalSize::new(420_u32, logical_h));
+        // Read saved width from settings, fall back to 420
+        let saved_w = read_settings_value("windowWidth")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+            .unwrap_or(420);
+
+        let _ = window.set_size(tauri::LogicalSize::new(saved_w, logical_h));
         #[cfg(target_os = "macos")]
         set_window_above_dock(window);
         position_window_at_cursor(window);
@@ -363,6 +359,12 @@ fn get_recent_clips(
 fn get_total_count(state: tauri::State<AppState>) -> Result<i64, String> {
     let storage = state.storage.lock().map_err(|_| "Lock error")?;
     storage.get_total_count().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_clip_stats(state: tauri::State<AppState>) -> Result<Vec<(String, i64)>, String> {
+    let storage = state.storage.lock().map_err(|_| "Lock error")?;
+    storage.get_stats().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -791,6 +793,22 @@ fn save_settings(state: tauri::State<AppState>, settings: serde_json::Value) -> 
 }
 
 #[tauri::command]
+fn save_window_size(state: tauri::State<AppState>, width: u32, height: u32) -> Result<(), String> {
+    let path = {
+        let storage = state.storage.lock().map_err(|_| "Lock error")?;
+        storage.data_dir().join("settings.json")
+    };
+    let mut settings: serde_json::Value = match std::fs::read_to_string(&path) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or(serde_json::json!({})),
+        Err(_) => serde_json::json!({}),
+    };
+    settings["windowWidth"] = serde_json::Value::Number(width.into());
+    settings["windowHeight"] = serde_json::Value::Number(height.into());
+    let s = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, s).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn open_accessibility_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -856,6 +874,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
         .invoke_handler(tauri::generate_handler![
             get_recent_clips,
             get_total_count,
+            get_clip_stats,
             clear_unpinned_clips,
             search_clips,
             get_clip_content,
@@ -872,6 +891,7 @@ pub fn run(rx: crossbeam_channel::Receiver<clipboard::ClipEvent>, skip_next_clip
             paste_clip,
             get_settings,
             save_settings,
+            save_window_size,
             apply_layout,
             update_hotkey,
         ])

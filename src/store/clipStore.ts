@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
 export type ClipType = 'Text' | 'Image' | 'Html' | 'Files' | 'Color'
-export type FilterValue = ClipType | 'link' | ''
+export type FilterValue = ClipType | 'link' | 'pinned' | ''
 
 export interface ClipItem {
   id: number

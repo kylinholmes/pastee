@@ -1,12 +1,10 @@
-export type SettingsSection = 'general' | 'appearance' | 'shortcuts' | 'storage' | 'ocr' | 'about'
+export type SettingsSection = 'general' | 'shortcuts' | 'ocr' | 'about'
 
 const NAV_ITEMS: { id: SettingsSection; label: string }[] = [
-  { id: 'general',    label: '通用' },
-  { id: 'appearance', label: '外观' },
-  { id: 'shortcuts',  label: '快捷键' },
-  { id: 'storage',    label: '存储' },
-  { id: 'ocr',        label: 'OCR' },
-  { id: 'about',      label: '关于' },
+  { id: 'general',   label: '通用' },
+  { id: 'shortcuts', label: '快捷键' },
+  { id: 'ocr',       label: 'OCR' },
+  { id: 'about',     label: '关于' },
 ]
 
 interface Props {

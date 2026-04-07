@@ -9,6 +9,7 @@ const FILTERS: { label: string; value: FilterValue }[] = [
   { label: 'Color', value: 'Color' },
   { label: 'Files', value: 'Files' },
   { label: 'Link', value: 'link' },
+  { label: 'Pinned', value: 'pinned' },
 ]
 
 const TYPE_COLORS: Record<string, string> = {
@@ -18,6 +19,7 @@ const TYPE_COLORS: Record<string, string> = {
   Color: 'text-[#94a3b8]',
   Files: 'text-[#64748b]',
   link: 'text-[#3b82f6]',
+  pinned: 'text-[#f59e0b]',
 }
 
 export function TypeFilterBarInline() {
