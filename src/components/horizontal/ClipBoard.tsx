@@ -1,15 +1,31 @@
 // src/components/horizontal/ClipBoard.tsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useClipStore } from '../../store/clipStore'
 import { useQueueStore } from '../../store/queueStore'
 import { ClipCard } from './ClipCard'
 import { QueueGroupCard } from './QueueGroupCard'
 
 export function ClipBoard() {
-  const { allClips, searchResults, searchQuery, filterType } = useClipStore()
+  const { allClips, searchResults, searchQuery, filterType, fetchMoreClips, hasMore } = useClipStore()
   const groups = useQueueStore(s => s.groups)
   const groupForItem = useQueueStore(s => s.groupForItem)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchMoreClips()
+        }
+      },
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fetchMoreClips])
 
   const list = useMemo(() => {
     let base = searchQuery.trim() ? searchResults : allClips
@@ -54,6 +70,10 @@ export function ClipBoard() {
           <div className="flex items-center justify-center w-full">
             <p className="text-sm text-[var(--text-muted)]">暂无内容</p>
           </div>
+        )}
+        {/* Sentinel for infinite scroll */}
+        {hasMore && !searchQuery.trim() && (
+          <div ref={sentinelRef} className="w-4 flex-shrink-0" />
         )}
       </div>
     </div>

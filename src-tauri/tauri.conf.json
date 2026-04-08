@@ -14,7 +14,7 @@
       {
         "label": "main",
         "title": "pastee",
-        "width": 1440,
+        "width": 480,
         "height": 480,
         "decorations": false,
         "resizable": true,
@@ -22,6 +22,19 @@
         "visible": false,
         "skipTaskbar": true,
         "alwaysOnTop": true
+      },
+      {
+        "label": "settings",
+        "url": "#/settings",
+        "title": "pastee 设置",
+        "width": 720,
+        "height": 560,
+        "decorations": true,
+        "resizable": false,
+        "transparent": false,
+        "visible": false,
+        "alwaysOnTop": false,
+        "fullscreen": false
       }
     ],
     "security": {

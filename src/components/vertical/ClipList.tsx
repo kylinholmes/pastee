@@ -1,5 +1,5 @@
 // src/components/vertical/ClipList.tsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useClipStore, ClipItem as ClipItemType } from '../../store/clipStore'
 import { useQueueStore } from '../../store/queueStore'
 import { ClipItem } from './ClipItem'
@@ -39,10 +39,27 @@ function groupByDay(items: ClipItemType[]): { label: string; items: ClipItemType
 }
 
 export function ClipList() {
-  const { allClips, searchResults, searchQuery, filterType } = useClipStore()
+  const { allClips, searchResults, searchQuery, filterType, fetchMoreClips, hasMore } = useClipStore()
   const groups = useQueueStore(s => s.groups)
   const groupForItem = useQueueStore(s => s.groupForItem)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // IntersectionObserver to detect when sentinel is visible (scrolled to bottom)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchMoreClips()
+        }
+      },
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fetchMoreClips])
 
   const list = useMemo(() => {
     let base = searchQuery.trim() ? searchResults : allClips
@@ -100,6 +117,11 @@ export function ClipList() {
         <div className="px-4 py-8 text-center">
           <p className="text-sm text-[var(--text-muted)]">暂无内容</p>
         </div>
+      )}
+
+      {/* Sentinel for infinite scroll */}
+      {hasMore && !searchQuery.trim() && (
+        <div ref={sentinelRef} className="h-4" />
       )}
     </div>
   )

@@ -18,7 +18,7 @@ const BUILTIN_SHORTCUTS_MAC = [
 ]
 
 export function ShortcutsPanel() {
-  const { activationHotkey, update } = useSettingsStore()
+  const { activationHotkey } = useSettingsStore()
   const [isMac, setIsMac] = useState(false)
   const [recording, setRecording] = useState(false)
 

@@ -29,6 +29,8 @@ interface ClipStore {
   filterType: FilterValue
   limit: number
   offset: number
+  hasMore: boolean
+  loadingMore: boolean
   thumbnailCache: Map<number, string>
   totalCount: number
 
@@ -36,6 +38,7 @@ interface ClipStore {
   setFilterType: (type: FilterValue) => void
   setOffset: (offset: number) => void
   fetchAllClips: () => Promise<void>
+  fetchMoreClips: () => Promise<void>
   fetchTotalCount: () => Promise<void>
   handleSearch: (query: string) => Promise<void>
   handleDelete: (id: number) => Promise<void>
@@ -50,6 +53,8 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   filterType: '',
   limit: 50,
   offset: 0,
+  hasMore: true,
+  loadingMore: false,
   thumbnailCache: new Map(),
   totalCount: 0,
 
@@ -66,9 +71,9 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   },
 
   fetchAllClips: async () => {
-    const { limit, offset, thumbnailCache } = get()
-    const result = await invoke<ClipItem[]>('get_recent_clips', { limit, offset })
-    set({ allClips: result })
+    const { limit, thumbnailCache } = get()
+    const result = await invoke<ClipItem[]>('get_recent_clips', { limit, offset: 0 })
+    set({ allClips: result, offset: 0, hasMore: result.length >= limit })
 
     // Load thumbnails for Image items not yet cached
     const imageItems = result.filter(item => item.content_type === 'Image' && !thumbnailCache.has(item.id))
@@ -81,6 +86,38 @@ export const useClipStore = create<ClipStore>((set, get) => ({
         } catch {}
       }))
       set({ thumbnailCache: cache })
+    }
+  },
+
+  fetchMoreClips: async () => {
+    const { limit, offset, allClips, loadingMore, hasMore, thumbnailCache } = get()
+    if (loadingMore || !hasMore) return
+    const newOffset = offset + limit
+    set({ loadingMore: true })
+    try {
+      const result = await invoke<ClipItem[]>('get_recent_clips', { limit, offset: newOffset })
+      const existingIds = new Set(allClips.map(c => c.id))
+      const newItems = result.filter(c => !existingIds.has(c.id))
+      set({
+        allClips: [...allClips, ...newItems],
+        offset: newOffset,
+        hasMore: result.length >= limit,
+      })
+
+      // Load thumbnails for new Image items
+      const imageItems = newItems.filter(item => item.content_type === 'Image' && !thumbnailCache.has(item.id))
+      if (imageItems.length > 0) {
+        const cache = new Map(get().thumbnailCache)
+        await Promise.all(imageItems.map(async (item) => {
+          try {
+            const b64 = await invoke<string | null>('get_thumbnail', { id: item.id })
+            if (b64) cache.set(item.id, `data:image/webp;base64,${b64}`)
+          } catch {}
+        }))
+        set({ thumbnailCache: cache })
+      }
+    } finally {
+      set({ loadingMore: false })
     }
   },
 
